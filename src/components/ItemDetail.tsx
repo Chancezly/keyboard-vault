@@ -95,7 +95,15 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
               {item.price ? (
                 <div>
                   <span className="text-[14px] font-medium">¥{item.price}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">价格</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">
+                    {item.status === 'sold' ? '购入价' : '价格'}
+                  </span>
+                </div>
+              ) : null}
+              {item.status === 'sold' && item.soldPrice != null ? (
+                <div>
+                  <span className="text-[14px] font-medium">¥{item.soldPrice}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">售出价</span>
                 </div>
               ) : null}
               {item.acquired ? (

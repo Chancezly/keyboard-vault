@@ -1,6 +1,6 @@
 export type ItemCategory = 'keyboards' | 'keycaps' | 'switches' | 'builds'
 
-export type ItemStatus = 'owned' | 'wishlist' | 'sold' | 'building'
+export type ItemStatus = 'in-use' | 'collection' | 'wishlist' | 'sold'
 
 export interface ItemRelation {
   role: string
@@ -47,6 +47,7 @@ export interface CollectionItem {
   ratingDetail?: RatingDetail
   acquired?: string
   price?: number
+  soldPrice?: number
   currency?: string
   layout?: string
   mount?: string
@@ -88,17 +89,31 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
 }
 
 export const STATUS_LABELS: Record<ItemStatus, string> = {
-  owned: '已拥有',
+  'in-use': '使用中',
+  collection: '收藏中',
   wishlist: '心愿单',
-  sold: '已出',
-  building: '搭建中',
+  sold: '已售出',
 }
 
 export const STATUS_COLORS: Record<ItemStatus, string> = {
-  owned: 'bg-emerald-500/20 text-emerald-300',
+  'in-use': 'bg-emerald-500/20 text-emerald-300',
+  collection: 'bg-accent/20 text-accent',
   wishlist: 'bg-amber-500/20 text-amber-300',
   sold: 'bg-zinc-500/20 text-zinc-400',
-  building: 'bg-accent/20 text-accent',
+}
+
+// 兼容旧数据里的状态取值
+export const LEGACY_STATUS_MAP: Record<string, ItemStatus> = {
+  owned: 'collection',
+  building: 'in-use',
+  'in-use': 'in-use',
+  collection: 'collection',
+  wishlist: 'wishlist',
+  sold: 'sold',
+}
+
+export function normalizeStatus(raw?: string): ItemStatus {
+  return (raw && LEGACY_STATUS_MAP[raw]) || 'collection'
 }
 
 export const RELATION_LABELS: Record<string, string> = {

@@ -63,6 +63,7 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
       tagGroups: draft.tags.length ? [{ group: '', values: draft.tags }] : [],
       rating: hasRating ? rd?.overall : undefined,
       ratingDetail: hasRating ? rd : undefined,
+      soldPrice: draft.status === 'sold' ? draft.soldPrice : undefined,
     }
     onSave(normalized)
   }
@@ -143,7 +144,7 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
           </div>
 
           {/* Specification */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>配列</Label>
               <input className={inputClass} value={draft.layout ?? ''} onChange={(e) => set('layout', e.target.value || undefined)} placeholder="65%" />
@@ -152,26 +153,24 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
               <Label>结构 / 高度</Label>
               <input className={inputClass} value={draft.mount ?? draft.profile ?? ''} onChange={(e) => set(draft.category === 'keycaps' ? 'profile' : 'mount', e.target.value || undefined)} placeholder="Gasket / Cherry" />
             </div>
-            <div>
-              <Label>材质 / 类型</Label>
-              <input className={inputClass} value={draft.material ?? draft.switchType ?? ''} onChange={(e) => set(draft.category === 'switches' ? 'switchType' : 'material', e.target.value || undefined)} placeholder="aluminum / Linear" />
-            </div>
           </div>
 
           {/* State detail + purchase */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className={`grid gap-4 ${draft.status === 'sold' ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <div>
               <Label>成色 / 状况</Label>
               <input className={inputClass} value={draft.condition ?? ''} onChange={(e) => set('condition', e.target.value || undefined)} placeholder="excellent" />
             </div>
             <div>
-              <Label>位置</Label>
-              <input className={inputClass} value={draft.location ?? ''} onChange={(e) => set('location', e.target.value || undefined)} placeholder="desk" />
-            </div>
-            <div>
-              <Label>价格 (¥)</Label>
+              <Label>购买价格 (¥)</Label>
               <input type="number" className={inputClass} value={draft.price ?? ''} onChange={(e) => set('price', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="1899" />
             </div>
+            {draft.status === 'sold' && (
+              <div>
+                <Label>售出价格 (¥)</Label>
+                <input type="number" className={inputClass} value={draft.soldPrice ?? ''} onChange={(e) => set('soldPrice', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="1600" />
+              </div>
+            )}
           </div>
 
           {/* Rating */}

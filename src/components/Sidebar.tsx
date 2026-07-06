@@ -19,8 +19,10 @@ interface SidebarProps {
   aiOpen: boolean
   stats: {
     total: number
-    owned: number
+    inUse: number
+    collection: number
     wishlist: number
+    sold: number
     byCategory: Record<ItemCategory, number>
   }
   vaultMode: 'bundled' | 'directory'
@@ -100,14 +102,22 @@ export function Sidebar({
       </nav>
 
       {/* Stats */}
-      <div className="px-5 py-4 mx-3 mb-2 rounded-xl bg-white/[0.03]">
-        <div className="flex justify-between text-[11px] text-text-tertiary mb-1.5">
-          <span>已拥有</span>
-          <span className="text-emerald-400 tabular-nums">{stats.owned}</span>
+      <div className="px-5 py-4 mx-3 mb-2 rounded-xl bg-white/[0.03] space-y-1.5">
+        <div className="flex justify-between text-[11px] text-text-tertiary">
+          <span>使用中</span>
+          <span className="text-emerald-400 tabular-nums">{stats.inUse}</span>
+        </div>
+        <div className="flex justify-between text-[11px] text-text-tertiary">
+          <span>收藏中</span>
+          <span className="text-accent tabular-nums">{stats.collection}</span>
         </div>
         <div className="flex justify-between text-[11px] text-text-tertiary">
           <span>心愿单</span>
           <span className="text-amber-400 tabular-nums">{stats.wishlist}</span>
+        </div>
+        <div className="flex justify-between text-[11px] text-text-tertiary">
+          <span>已售出</span>
+          <span className="text-zinc-400 tabular-nums">{stats.sold}</span>
         </div>
       </div>
 

@@ -106,9 +106,10 @@ export function filterItems(
 export function getStats(items: CollectionItem[]) {
   return {
     total: items.length,
-    owned: items.filter((i) => i.status === 'owned').length,
+    inUse: items.filter((i) => i.status === 'in-use').length,
+    collection: items.filter((i) => i.status === 'collection').length,
     wishlist: items.filter((i) => i.status === 'wishlist').length,
-    building: items.filter((i) => i.status === 'building').length,
+    sold: items.filter((i) => i.status === 'sold').length,
     byCategory: {
       keyboards: items.filter((i) => i.category === 'keyboards').length,
       keycaps: items.filter((i) => i.category === 'keycaps').length,

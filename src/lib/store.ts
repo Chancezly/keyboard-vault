@@ -111,7 +111,7 @@ export function createBlankItem(category: CollectionItem['category']): Collectio
     name: '',
     brand: '',
     category,
-    status: 'owned',
+    status: 'in-use',
     tags: [],
     tagGroups: [],
     image: '',

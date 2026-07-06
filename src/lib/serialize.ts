@@ -34,7 +34,9 @@ export function serializeItem(item: CollectionItem): string {
   const state = clean({
     status: item.status,
     condition: item.condition,
-    location: item.location,
+    price: item.price,
+    soldPrice: item.status === 'sold' ? item.soldPrice : undefined,
+    currency: item.price != null || item.soldPrice != null ? item.currency : undefined,
   })
 
   const relations: Record<string, string> = {}

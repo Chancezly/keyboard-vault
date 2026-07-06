@@ -4,11 +4,11 @@ import type {
   HistoryEvent,
   ItemCategory,
   ItemRelation,
-  ItemStatus,
   RatingDetail,
   TagGroup,
   UserPreferences,
 } from './types'
+import { normalizeStatus } from './types'
 
 interface ItemFrontmatter {
   identity?: {
@@ -17,7 +17,7 @@ interface ItemFrontmatter {
     brand?: string
     maker?: string
     type?: string
-    status?: ItemStatus
+    status?: string
   }
   specification?: {
     layout?: string
@@ -30,10 +30,13 @@ interface ItemFrontmatter {
     feelProfile?: string
   }
   state?: {
-    status?: ItemStatus
+    status?: string
     condition?: string
     location?: string
     inUse?: boolean
+    price?: number
+    soldPrice?: number
+    currency?: string
   }
   build?: {
     acquired?: string
@@ -132,8 +135,9 @@ export function parseItemMarkdown(
 
   const acquisition = history.find((h) => h.price != null) ?? history.find((h) => h.date)
   const acquired = legacyBuild.acquired ?? acquisition?.date
-  const price = legacyBuild.price ?? acquisition?.price
-  const currency = legacyBuild.currency ?? acquisition?.currency ?? 'CNY'
+  const price = state.price ?? legacyBuild.price ?? acquisition?.price
+  const soldPrice = state.soldPrice
+  const currency = state.currency ?? legacyBuild.currency ?? acquisition?.currency ?? 'CNY'
 
   const ratingDetail = buildRatingDetail(fm.rating)
 
@@ -142,7 +146,7 @@ export function parseItemMarkdown(
     name: identity.name ?? 'Untitled',
     brand: identity.brand ?? identity.maker ?? 'Unknown',
     category,
-    status: state.status ?? identity.status ?? 'owned',
+    status: normalizeStatus(state.status ?? identity.status),
     condition: state.condition,
     location: state.location,
     tags,
@@ -153,6 +157,7 @@ export function parseItemMarkdown(
     ratingDetail,
     acquired,
     price,
+    soldPrice,
     currency,
     layout: specification.layout,
     mount: specification.mount,
