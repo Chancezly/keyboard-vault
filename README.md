@@ -1,4 +1,4 @@
-# KeyVault
+# Keyboard Vault
 
 客制化键盘收藏库 — Local-first · Markdown · AI Native · 收藏管理
 
@@ -40,6 +40,29 @@
 npm install
 npm run dev
 ```
+
+## 部署到 GitHub Pages
+
+仓库名建议：`keyboard-vault`  
+线上地址：`https://<你的用户名>.github.io/keyboard-vault/`
+
+### 首次发布
+
+1. 在 GitHub 新建仓库 **keyboard-vault**（Public，不要勾选 README）
+2. 本地推送：
+
+```bash
+git remote add origin https://github.com/<你的用户名>/keyboard-vault.git
+git push -u origin main
+```
+
+3. 打开仓库 **Settings → Pages → Build and deployment**
+   - Source 选 **GitHub Actions**
+4. 等待 Actions 跑完后访问 Pages 地址
+
+项目已包含 `.github/workflows/deploy.yml`，push 到 `main` 会自动构建并发布。
+
+> **说明**：GitHub Pages 上是静态站点，侧栏「连接本地文件夹」在 Chrome/Edge 仍可用；未连接时使用内置示例数据 + 浏览器缓存编辑。
 
 ## 数据结构
 
