@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Trash2, Download, Plus, Save } from 'lucide-react'
-import type { CollectionItem, ItemCategory, ItemStatus } from '../lib/types'
+import { X, Upload, Trash2, Download, Plus, Save, Star } from 'lucide-react'
+import type { CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
 import {
   CATEGORY_LABELS,
   STATUS_LABELS,
@@ -9,11 +9,45 @@ import {
   SOUND_TENDENCY_LABELS,
 } from '../lib/types'
 import { downloadMarkdown } from '../lib/serialize'
+import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
+import type { DropdownOption } from './Dropdown'
+
+const RATING_OPTIONS: DropdownOption[] = [
+  { value: '', label: '—' },
+  ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) })),
+]
+
+const CATEGORY_OPTIONS: DropdownOption[] = (Object.keys(CATEGORY_LABELS) as ItemCategory[]).map((c) => ({
+  value: c,
+  label: CATEGORY_LABELS[c],
+}))
+
+const STATUS_OPTIONS: DropdownOption[] = (Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({
+  value: s,
+  label: STATUS_LABELS[s],
+}))
+
+// 热门轴体代工厂，datalist 提供快速选择同时允许自定义
+const POPULAR_MANUFACTURERS = ['键极客', 'HMX', '凯华', '羽树', '旭华']
+
+// 常用键盘配列，主题化下拉可选也可自定义
+const KEYBOARD_LAYOUTS = ['60%', '65%', '75%', 'TKL', '98%', '104%', 'Alice']
+
+// 带单位的规格字段：输入数字自动补上单位
+const SPEC_UNITS: Partial<Record<SpecFieldKey, string>> = {
+  actuation: 'g',
+  bottomOut: 'g',
+  preTravel: 'mm',
+  bottomTravel: 'mm',
+}
+
+const stripUnit = (v?: string) => (v ?? '').replace(/[^\d.]/g, '')
 
 interface ItemEditorProps {
   item: CollectionItem
   isNew: boolean
   allTags: string[]
+  studioSuggestions: string[]
   onSave: (item: CollectionItem) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -23,16 +57,79 @@ function Label({ children }: { children: React.ReactNode }) {
   return <label className="block text-[11px] font-medium text-text-tertiary mb-1.5">{children}</label>
 }
 
-const inputClass =
-  'w-full px-3 py-2 rounded-lg text-[13px] bg-white/[0.04] border border-white/[0.08] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:bg-white/[0.06] transition-all'
+// 计算灰色预输入提示：优先补全最后一个单词（采用候选词自身的大小写），其次追加后缀
+function computeSuggestion(
+  value: string,
+  completions: string[],
+  suffix?: string,
+): { ghost: string; accepted: string } {
+  if (!value) return { ghost: '', accepted: value }
+  const cut = value.lastIndexOf(' ') + 1
+  const token = value.slice(cut)
+  if (token) {
+    const lower = token.toLowerCase()
+    for (const w of completions) {
+      if (w.length > token.length && w.toLowerCase().startsWith(lower)) {
+        // 用候选词的原始大小写替换已输入片段，保证首字母大写
+        return { ghost: w.slice(token.length), accepted: value.slice(0, cut) + w }
+      }
+    }
+  }
+  if (suffix && !value.endsWith(suffix)) return { ghost: suffix, accepted: value + suffix }
+  return { ghost: '', accepted: value }
+}
 
-export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: ItemEditorProps) {
-  const [draft, setDraft] = useState<CollectionItem>(item)
+interface SuggestInputProps {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  completions?: string[]
+  suffix?: string
+}
+
+// 带灰色 ghost 提示的输入框，Tab / → 接受补全
+function SuggestInput({ value, onChange, placeholder, completions = [], suffix }: SuggestInputProps) {
+  const { ghost, accepted } = computeSuggestion(value, completions, suffix)
+
+  return (
+    <div className="relative w-full rounded-lg bg-white/[0.06] border border-white/[0.08] focus-within:border-accent/40 focus-within:bg-white/[0.09] transition-all">
+      {ghost && (
+        <div className="absolute inset-0 px-3 py-2 text-[13px] whitespace-pre overflow-hidden pointer-events-none">
+          <span className="invisible">{value}</span>
+          <span className="text-text-tertiary/70">{ghost}</span>
+        </div>
+      )}
+      <input
+        className="relative w-full px-3 py-2 rounded-lg text-[13px] bg-transparent text-text-primary placeholder:text-text-tertiary focus:outline-none"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (!ghost) return
+          const atEnd = e.currentTarget.selectionStart === value.length
+          if (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd)) {
+            e.preventDefault()
+            onChange(accepted)
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+
+export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, onDelete, onClose }: ItemEditorProps) {
+  const [draft, setDraft] = useState<CollectionItem>(() =>
+    item.category === 'switches' && !item.lube ? { ...item, lube: '厂润' } : item,
+  )
   const [tagInput, setTagInput] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const set = <K extends keyof CollectionItem>(key: K, value: CollectionItem[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
+
+  const setCategory = (c: ItemCategory) =>
+    setDraft((d) => ({ ...d, category: c, lube: c === 'switches' && !d.lube ? '厂润' : d.lube }))
 
   const setRating = (dim: 'overall' | 'sound' | 'feel' | 'build' | 'aesthetics', raw: string) => {
     const value = raw === '' ? undefined : Number(raw)
@@ -128,27 +225,41 @@ export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>名称</Label>
-              <input className={inputClass} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="例如 Zoom65 V3" />
+              <SuggestInput
+                value={draft.name}
+                onChange={(v) => set('name', v)}
+                placeholder={draft.category === 'switches' ? '例如 北极星轴' : '例如 Zoom65 V3'}
+                suffix={draft.category === 'switches' ? '轴' : undefined}
+              />
             </div>
             <div>
-              <Label>品牌</Label>
-              <input className={inputClass} value={draft.brand} onChange={(e) => set('brand', e.target.value)} placeholder="例如 Wuque Studio" />
+              <Label>{draft.category === 'keyboards' ? '工作室' : '品牌'}</Label>
+              <SuggestInput
+                value={draft.brand}
+                onChange={(v) => set('brand', v)}
+                placeholder="例如 Wuque Studio"
+                completions={
+                  draft.category === 'keyboards'
+                    ? [...studioSuggestions, 'Studio', 'Lab']
+                    : []
+                }
+              />
             </div>
             <div>
               <Label>分类</Label>
-              <select className={inputClass} value={draft.category} onChange={(e) => set('category', e.target.value as ItemCategory)}>
-                {(Object.keys(CATEGORY_LABELS) as ItemCategory[]).map((c) => (
-                  <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={draft.category}
+                onChange={(v) => setCategory(v as ItemCategory)}
+                options={CATEGORY_OPTIONS}
+              />
             </div>
             <div>
               <Label>状态</Label>
-              <select className={inputClass} value={draft.status} onChange={(e) => set('status', e.target.value as ItemStatus)}>
-                {(Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={draft.status}
+                onChange={(v) => set('status', v as ItemStatus)}
+                options={STATUS_OPTIONS}
+              />
             </div>
           </div>
 
@@ -159,17 +270,73 @@ export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: 
                 CATEGORY_SPEC_FIELDS[draft.category].length >= 3 ? 'grid-cols-3' : 'grid-cols-2'
               }`}
             >
-              {CATEGORY_SPEC_FIELDS[draft.category].map((field) => (
-                <div key={field.key}>
-                  <Label>{field.label}</Label>
-                  <input
-                    className={inputClass}
-                    value={draft[field.key] ?? ''}
-                    onChange={(e) => set(field.key, e.target.value || undefined)}
-                    placeholder={field.placeholder}
-                  />
-                </div>
-              ))}
+              {CATEGORY_SPEC_FIELDS[draft.category].map((field) => {
+                const unit = SPEC_UNITS[field.key]
+                if (field.key === 'layout') {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <ComboSelect
+                        value={(draft.layout as string) ?? ''}
+                        onChange={(v) => set('layout', v || undefined)}
+                        options={KEYBOARD_LAYOUTS}
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  )
+                }
+                if (field.key === 'manufacturer') {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <input
+                        list="manufacturer-options"
+                        className={inputClass}
+                        value={(draft[field.key] as string) ?? ''}
+                        onChange={(e) => set(field.key, e.target.value || undefined)}
+                        placeholder="选择或输入"
+                      />
+                      <datalist id="manufacturer-options">
+                        {POPULAR_MANUFACTURERS.map((m) => (
+                          <option key={m} value={m} />
+                        ))}
+                      </datalist>
+                    </div>
+                  )
+                }
+                if (unit) {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          className={`${inputClass} pr-9`}
+                          value={stripUnit(draft[field.key] as string)}
+                          onChange={(e) =>
+                            set(field.key, e.target.value === '' ? undefined : `${e.target.value}${unit}`)
+                          }
+                          placeholder={stripUnit(field.placeholder) || field.placeholder}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-text-tertiary pointer-events-none">
+                          {unit}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div key={field.key}>
+                    <Label>{field.label}</Label>
+                    <input
+                      className={inputClass}
+                      value={(draft[field.key] as string) ?? ''}
+                      onChange={(e) => set(field.key, e.target.value || undefined)}
+                      placeholder={field.placeholder}
+                    />
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -192,14 +359,24 @@ export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: 
             <Label>评分（1 - 5）</Label>
             {draft.category === 'switches' ? (
               <div className="space-y-4">
-                <div className="w-1/3">
-                  <span className="text-[10px] text-text-tertiary">总分</span>
-                  <select className={inputClass} value={draft.ratingDetail?.overall ?? ''} onChange={(e) => setRating('overall', e.target.value)}>
-                    <option value="">—</option>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
+                <div>
+                  <span className="text-[10px] text-text-tertiary block mb-1.5">总分</span>
+                  <div className="flex items-center gap-1.5">
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const active = (draft.ratingDetail?.overall ?? 0) >= n
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setRating('overall', draft.ratingDetail?.overall === n ? '' : String(n))}
+                          className="p-0.5 transition-transform hover:scale-110"
+                          aria-label={`${n} 星`}
+                        >
+                          <Star className={`w-6 h-6 ${active ? 'text-amber-400 fill-amber-400' : 'text-white/20'}`} />
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -215,7 +392,7 @@ export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: 
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           draft.soundTendency === n
                             ? 'bg-accent text-white'
-                            : 'bg-white/[0.04] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.08]'
+                            : 'bg-white/[0.06] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.1]'
                         }`}
                       >
                         {SOUND_TENDENCY_LABELS[n]}
@@ -227,23 +404,21 @@ export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: 
             ) : (
               <div className="grid grid-cols-5 gap-3">
                 <div>
-                  <span className="text-[10px] text-text-tertiary">总分</span>
-                  <select className={inputClass} value={draft.ratingDetail?.overall ?? ''} onChange={(e) => setRating('overall', e.target.value)}>
-                    <option value="">—</option>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
+                  <span className="text-[10px] text-text-tertiary block mb-1">总分</span>
+                  <Dropdown
+                    value={draft.ratingDetail?.overall != null ? String(draft.ratingDetail.overall) : ''}
+                    onChange={(v) => setRating('overall', v)}
+                    options={RATING_OPTIONS}
+                  />
                 </div>
                 {(['sound', 'feel', 'build', 'aesthetics'] as const).map((dim) => (
                   <div key={dim}>
-                    <span className="text-[10px] text-text-tertiary">{RATING_DIMENSION_LABELS[dim]}</span>
-                    <select className={inputClass} value={draft.ratingDetail?.[dim] ?? ''} onChange={(e) => setRating(dim, e.target.value)}>
-                      <option value="">—</option>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
+                    <span className="text-[10px] text-text-tertiary block mb-1">{RATING_DIMENSION_LABELS[dim]}</span>
+                    <Dropdown
+                      value={draft.ratingDetail?.[dim] != null ? String(draft.ratingDetail[dim]) : ''}
+                      onChange={(v) => setRating(dim, v)}
+                      options={RATING_OPTIONS}
+                    />
                   </div>
                 ))}
               </div>

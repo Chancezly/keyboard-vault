@@ -1,6 +1,13 @@
-import { Search, LayoutGrid, List, SlidersHorizontal, Plus } from 'lucide-react'
+import { Search, LayoutGrid, List, Plus } from 'lucide-react'
 import type { ItemStatus } from '../lib/types'
 import { STATUS_LABELS } from '../lib/types'
+import { Dropdown } from './Dropdown'
+import type { DropdownOption } from './Dropdown'
+
+const STATUS_FILTER_OPTIONS: DropdownOption[] = [
+  { value: 'all', label: '全部状态' },
+  ...(Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({ value: s, label: STATUS_LABELS[s] })),
+]
 
 interface HeaderProps {
   search: string
@@ -42,35 +49,22 @@ export function Header({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="
-              w-56 pl-9 pr-4 py-2 rounded-xl text-[13px]
-              bg-white/[0.04] border border-white/[0.06]
+              w-56 pl-9 pr-4 py-2 rounded-lg text-[13px]
+              bg-white/[0.06] border border-white/[0.08]
               text-text-primary placeholder:text-text-tertiary
-              focus:outline-none focus:border-accent/40 focus:bg-white/[0.06]
+              focus:outline-none focus:border-accent/40 focus:bg-white/[0.09]
               transition-all duration-200
             "
           />
         </div>
 
         {/* Status filter */}
-        <div className="relative">
-          <SlidersHorizontal className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none" />
-          <select
-            value={status}
-            onChange={(e) => onStatusChange(e.target.value as ItemStatus | 'all')}
-            className="
-              appearance-none pl-8 pr-8 py-2 rounded-xl text-[13px]
-              bg-white/[0.04] border border-white/[0.06]
-              text-text-secondary cursor-pointer
-              focus:outline-none focus:border-accent/40
-              transition-all duration-200
-            "
-          >
-            <option value="all">全部状态</option>
-            {Object.entries(STATUS_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </div>
+        <Dropdown
+          value={status}
+          onChange={(v) => onStatusChange(v as ItemStatus | 'all')}
+          options={STATUS_FILTER_OPTIONS}
+          fullWidth={false}
+        />
 
         {/* View toggle */}
         <div className="flex rounded-xl bg-white/[0.04] border border-white/[0.06] p-0.5">

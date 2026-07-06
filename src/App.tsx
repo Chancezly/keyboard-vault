@@ -25,6 +25,18 @@ export default function App() {
 
   const stats = useMemo(() => getStats(items), [items])
   const allTags = useMemo(() => getAllTags(items), [items])
+  const studioSuggestions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          items
+            .filter((i) => i.category === 'keyboards')
+            .map((i) => i.brand.trim())
+            .filter(Boolean),
+        ),
+      ),
+    [items],
+  )
 
   const filtered = useMemo(
     () => filterItems(items, category, status, search),
@@ -137,6 +149,7 @@ export default function App() {
           item={editing.item}
           isNew={editing.isNew}
           allTags={allTags}
+          studioSuggestions={studioSuggestions}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}

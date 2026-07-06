@@ -11,6 +11,13 @@ import {
   RATING_DIMENSION_LABELS,
   SOUND_TENDENCY_LABELS,
 } from '../lib/types'
+import { Dropdown } from './Dropdown'
+import type { DropdownOption } from './Dropdown'
+
+const STATUS_OPTIONS: DropdownOption[] = (Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({
+  value: s,
+  label: STATUS_LABELS[s],
+}))
 
 interface ItemDetailProps {
   item: CollectionItem
@@ -62,20 +69,13 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
 
             <div className="absolute bottom-0 left-0 right-0 p-8">
               <div className="flex items-center gap-2 mb-2">
-                <div className="relative">
-                  <select
-                    value={item.status}
-                    onChange={(e) => onStatusChange(e.target.value as ItemStatus)}
-                    className={`appearance-none text-[11px] pl-2 pr-6 py-0.5 rounded-lg font-medium cursor-pointer focus:outline-none ${STATUS_COLORS[item.status]}`}
-                  >
-                    {(Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => (
-                      <option key={s} value={s} className="bg-surface-elevated text-text-primary">
-                        {STATUS_LABELS[s]}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[8px] opacity-70">▼</span>
-                </div>
+                <Dropdown
+                  value={item.status}
+                  onChange={(v) => onStatusChange(v as ItemStatus)}
+                  options={STATUS_OPTIONS}
+                  fullWidth={false}
+                  buttonClassName={`flex items-center gap-1.5 text-[11px] pl-2.5 pr-2 py-1 rounded-lg font-medium cursor-pointer transition-all ${STATUS_COLORS[item.status]}`}
+                />
                 <span className="text-[11px] text-text-tertiary">{CATEGORY_LABELS[item.category]}</span>
               </div>
               <p className="text-[13px] text-text-secondary font-medium">{item.brand}</p>
