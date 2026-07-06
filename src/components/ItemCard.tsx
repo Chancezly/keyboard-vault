@@ -1,6 +1,7 @@
 import { Star } from 'lucide-react'
 import type { CollectionItem } from '../lib/types'
 import { STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS } from '../lib/types'
+import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
 
 interface ItemCardProps {
   item: CollectionItem
@@ -9,6 +10,14 @@ interface ItemCardProps {
 }
 
 export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
+  const isBuild = item.category === 'builds'
+  const buildParts = isBuild
+    ? BUILD_PARTS.map(({ role, label }) => {
+        const name = getBuildPartName(item.relations, role)
+        return name ? `${label} ${name}` : null
+      }).filter(Boolean)
+    : []
+
   if (viewMode === 'list') {
     return (
       <button
@@ -29,14 +38,26 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px] text-text-tertiary">{item.brand}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${STATUS_COLORS[item.status]}`}>
-              {STATUS_LABELS[item.status]}
-            </span>
+            {!isBuild && (
+              <>
+                <span className="text-[11px] text-text-tertiary">{item.brand}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${STATUS_COLORS[item.status]}`}>
+                  {STATUS_LABELS[item.status]}
+                </span>
+              </>
+            )}
+            {isBuild && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-amber-500/20 text-amber-300">
+                搭配
+              </span>
+            )}
           </div>
           <h3 className={`font-semibold truncate ${item.category === 'switches' ? 'text-[16px]' : 'text-[15px]'}`}>
             {item.name}
           </h3>
+          {isBuild && buildParts.length > 0 && (
+            <p className="text-[11px] text-text-tertiary mt-1 truncate">{buildParts.join(' · ')}</p>
+          )}
           <div className="flex items-center gap-3 mt-1.5">
             {item.category === 'switches' && item.manufacturer ? (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-accent/15 text-accent">
@@ -91,9 +112,16 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
         {/* Status badge */}
-        <span className={`absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded-lg font-medium backdrop-blur-md ${STATUS_COLORS[item.status]}`}>
-          {STATUS_LABELS[item.status]}
-        </span>
+        {!isBuild && (
+          <span className={`absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded-lg font-medium backdrop-blur-md ${STATUS_COLORS[item.status]}`}>
+            {STATUS_LABELS[item.status]}
+          </span>
+        )}
+        {isBuild && (
+          <span className="absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded-lg font-medium backdrop-blur-md bg-amber-500/20 text-amber-300">
+            搭配
+          </span>
+        )}
 
         {/* Rating */}
         {item.rating ? (
@@ -107,11 +135,17 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
       {/* Content */}
       <div className="p-5 space-y-2">
         <div>
-          <p className="text-[11px] text-text-tertiary font-medium">{item.brand}</p>
+          {!isBuild && <p className="text-[11px] text-text-tertiary font-medium">{item.brand}</p>}
           <h3 className={`font-semibold mt-0.5 leading-snug ${item.category === 'switches' ? 'text-[17px]' : 'text-[15px]'}`}>
             {item.name}
           </h3>
         </div>
+
+        {isBuild && buildParts.length > 0 && (
+          <p className="text-[11px] text-text-tertiary leading-relaxed line-clamp-2">
+            {buildParts.join(' · ')}
+          </p>
+        )}
 
         {item.category === 'switches' && (item.manufacturer || item.actuation) && (
           <div className="flex flex-wrap items-center gap-2">

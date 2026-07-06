@@ -109,9 +109,9 @@ export function createBlankItem(category: CollectionItem['category']): Collectio
   return {
     id,
     name: '',
-    brand: '',
+    brand: category === 'builds' ? '' : '',
     category,
-    status: 'in-use',
+    status: category === 'builds' ? 'collection' : 'in-use',
     tags: [],
     tagGroups: [],
     image: '',

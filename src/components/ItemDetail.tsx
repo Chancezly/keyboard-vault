@@ -12,6 +12,7 @@ import {
   RATING_DIMENSIONS,
   SOUND_TENDENCY_LABELS,
 } from '../lib/types'
+import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
 import { Dropdown } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
 import { StarRating } from './StarRating'
@@ -29,6 +30,8 @@ interface ItemDetailProps {
 }
 
 export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetailProps) {
+  const isBuild = item.category === 'builds'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
       {/* Backdrop */}
@@ -71,17 +74,37 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
 
             <div className="absolute bottom-0 left-0 right-0 p-8">
               <div className="flex items-center gap-2 mb-2">
-                <Dropdown
-                  value={item.status}
-                  onChange={(v) => onStatusChange(v as ItemStatus)}
-                  options={STATUS_OPTIONS}
-                  fullWidth={false}
-                  buttonClassName={`flex items-center gap-1.5 text-[11px] pl-2.5 pr-2 py-1 rounded-lg font-medium cursor-pointer transition-all ${STATUS_COLORS[item.status]}`}
-                />
+                {!isBuild && (
+                  <Dropdown
+                    value={item.status}
+                    onChange={(v) => onStatusChange(v as ItemStatus)}
+                    options={STATUS_OPTIONS}
+                    fullWidth={false}
+                    buttonClassName={`flex items-center gap-1.5 text-[11px] pl-2.5 pr-2 py-1 rounded-lg font-medium cursor-pointer transition-all ${STATUS_COLORS[item.status]}`}
+                  />
+                )}
                 <span className="text-[11px] text-text-tertiary">{CATEGORY_LABELS[item.category]}</span>
               </div>
-              <p className="text-[13px] text-text-secondary font-medium">{item.brand}</p>
+              {!isBuild && item.brand ? (
+                <p className="text-[13px] text-text-secondary font-medium">{item.brand}</p>
+              ) : null}
               <h2 className="text-3xl font-semibold tracking-tight mt-1 font-display">{item.name}</h2>
+              {isBuild && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {BUILD_PARTS.map(({ role, label }) => {
+                    const name = getBuildPartName(item.relations, role)
+                    if (!name) return null
+                    return (
+                      <span
+                        key={role}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-white/10 backdrop-blur-md text-white/90"
+                      >
+                        {label} · {name}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

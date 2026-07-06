@@ -41,13 +41,19 @@ export function serializeItem(item: CollectionItem): string {
     feelProfile: item.feelProfile,
   })
 
-  const state = clean({
-    status: item.status,
-    condition: item.condition,
-    price: item.price,
-    soldPrice: item.status === 'sold' ? item.soldPrice : undefined,
-    currency: item.price != null || item.soldPrice != null ? item.currency : undefined,
-  })
+  const state =
+    item.category === 'builds'
+      ? clean({
+          price: item.price,
+          currency: item.price != null ? item.currency : undefined,
+        })
+      : clean({
+          status: item.status,
+          condition: item.condition,
+          price: item.price,
+          soldPrice: item.status === 'sold' ? item.soldPrice : undefined,
+          currency: item.price != null || item.soldPrice != null ? item.currency : undefined,
+        })
 
   const relations: Record<string, string> = {}
   for (const rel of item.relations) relations[rel.role] = rel.ref

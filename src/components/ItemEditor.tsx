@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Trash2, Download, Plus, Save } from 'lucide-react'
+import { X, Upload, Trash2, Download, Plus, Save, ChevronDown } from 'lucide-react'
 import type { CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
 import {
   CATEGORY_LABELS,
@@ -11,6 +11,7 @@ import {
   computeOverallRating,
   normalizeRatingDetail,
 } from '../lib/types'
+import { BUILD_PARTS, getBuildPartName, setBuildPart, inventoryNames } from '../lib/builds'
 import { downloadMarkdown } from '../lib/serialize'
 import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
@@ -47,6 +48,7 @@ interface ItemEditorProps {
   isNew: boolean
   allTags: string[]
   studioSuggestions: string[]
+  inventoryItems: CollectionItem[]
   onSave: (item: CollectionItem) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -117,18 +119,143 @@ function SuggestInput({ value, onChange, placeholder, completions = [], suffix }
 }
 
 
-export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, onDelete, onClose }: ItemEditorProps) {
+function BuildSecondaryFields({
+  draft,
+  set,
+  setRating,
+  computedOverall,
+  tagInput,
+  setTagInput,
+  addTag,
+  removeTag,
+  suggestedTags,
+  inputClass,
+}: {
+  draft: CollectionItem
+  set: <K extends keyof CollectionItem>(key: K, value: CollectionItem[K]) => void
+  setRating: (dim: (typeof RATING_DIMENSIONS)[number], value: number | undefined) => void
+  computedOverall: number | undefined
+  tagInput: string
+  setTagInput: (v: string) => void
+  addTag: () => void
+  removeTag: (tag: string) => void
+  suggestedTags: string[]
+  inputClass: string
+}) {
+  return (
+    <>
+      <div>
+        <Label>搭配总价 (¥)</Label>
+        <input
+          type="number"
+          className={inputClass}
+          value={draft.price ?? ''}
+          onChange={(e) => set('price', e.target.value === '' ? undefined : Number(e.target.value))}
+          placeholder="2200"
+        />
+      </div>
+      <div>
+        <Label>评分</Label>
+        <div className="space-y-3">
+          {computedOverall != null && (
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+              <span className="text-[11px] text-text-tertiary shrink-0">总分</span>
+              <StarRating value={Math.round(computedOverall)} readonly size="sm" />
+              <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{computedOverall}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            {RATING_DIMENSIONS.map((dim) => (
+              <div key={dim} className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-text-tertiary shrink-0 w-8">{RATING_DIMENSION_LABELS[dim]}</span>
+                <StarRating value={draft.ratingDetail?.[dim]} onChange={(v) => setRating(dim, v)} size="sm" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div>
+        <Label>标签</Label>
+        <div className="flex gap-2 mb-2">
+          <input
+            className={inputClass}
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+            placeholder="输入标签后回车"
+          />
+          <button onClick={addTag} className="px-3 rounded-lg bg-white/[0.06] text-text-secondary hover:bg-white/[0.1] transition-all">
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        {draft.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {draft.tags.map((tag) => (
+              <span key={tag} className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-accent/15 text-accent">
+                {tag}
+                <button onClick={() => removeTag(tag)} className="hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {suggestedTags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {suggestedTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => set('tags', [...draft.tags, tag])}
+                className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.04] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.08]"
+              >
+                + {tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <Label>搭配笔记</Label>
+        <textarea
+          className={`${inputClass} resize-none leading-relaxed`}
+          rows={4}
+          value={draft.content}
+          onChange={(e) => set('content', e.target.value)}
+          placeholder="记录这套搭配的使用感受、适用场景…"
+        />
+      </div>
+    </>
+  )
+}
+
+
+export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, onSave, onDelete, onClose }: ItemEditorProps) {
   const [draft, setDraft] = useState<CollectionItem>(() =>
     item.category === 'switches' && !item.lube ? { ...item, lube: '厂润' } : item,
   )
   const [tagInput, setTagInput] = useState('')
+  const [buildMoreOpen, setBuildMoreOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const isBuild = draft.category === 'builds'
 
   const set = <K extends keyof CollectionItem>(key: K, value: CollectionItem[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
 
   const setCategory = (c: ItemCategory) =>
-    setDraft((d) => ({ ...d, category: c, lube: c === 'switches' && !d.lube ? '厂润' : d.lube }))
+    setDraft((d) => ({
+      ...d,
+      category: c,
+      lube: c === 'switches' && !d.lube ? '厂润' : d.lube,
+      brand: c === 'builds' ? '' : d.brand,
+    }))
+
+  const setBuildPartField = (role: string, category: ItemCategory, value: string) => {
+    setDraft((d) => ({
+      ...d,
+      relations: setBuildPart(d.relations, role, category, value, inventoryItems),
+    }))
+  }
 
   const setRating = (dim: (typeof RATING_DIMENSIONS)[number], value: number | undefined) => {
     setDraft((d) => {
@@ -164,6 +291,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
     const normalized: CollectionItem = {
       ...draft,
       name: draft.name.trim() || '未命名',
+      brand: draft.category === 'builds' ? draft.brand || '自定义' : draft.brand,
       tagGroups: draft.tags.length ? [{ group: '', values: draft.tags }] : [],
       rating: rd?.overall,
       ratingDetail: rd,
@@ -220,49 +348,144 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
           </div>
 
           {/* Basic */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>名称</Label>
-              <SuggestInput
-                value={draft.name}
-                onChange={(v) => set('name', v)}
-                placeholder={draft.category === 'switches' ? '例如 北极星轴' : '例如 Zoom65 V3'}
-                suffix={draft.category === 'switches' ? '轴' : undefined}
-              />
-            </div>
-            <div>
-              <Label>{draft.category === 'keyboards' ? '工作室' : '品牌'}</Label>
-              <SuggestInput
-                value={draft.brand}
-                onChange={(v) => set('brand', v)}
-                placeholder="例如 Wuque Studio"
-                completions={
-                  draft.category === 'keyboards'
-                    ? [...studioSuggestions, 'Studio', 'Lab']
-                    : []
-                }
-              />
-            </div>
-            <div>
-              <Label>分类</Label>
-              <Dropdown
-                value={draft.category}
-                onChange={(v) => setCategory(v as ItemCategory)}
-                options={CATEGORY_OPTIONS}
-              />
-            </div>
-            <div>
-              <Label>状态</Label>
-              <Dropdown
-                value={draft.status}
-                onChange={(v) => set('status', v as ItemStatus)}
-                options={STATUS_OPTIONS}
-              />
-            </div>
-          </div>
+          {isBuild ? (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>搭配名称</Label>
+                  <input
+                    className={inputClass}
+                    value={draft.name}
+                    onChange={(e) => set('name', e.target.value)}
+                    placeholder="例如 日常办公套装"
+                  />
+                </div>
+                <div>
+                  <Label>分类</Label>
+                  <Dropdown
+                    value={draft.category}
+                    onChange={(v) => setCategory(v as ItemCategory)}
+                    options={CATEGORY_OPTIONS}
+                  />
+                </div>
+              </div>
 
-          {/* Specification (category-specific) */}
-          {CATEGORY_SPEC_FIELDS[draft.category].length > 0 && (
+              {/* 核心：键盘 + 键帽 + 轴体 */}
+              <div className="p-4 rounded-xl bg-accent/5 border border-accent/15 space-y-4">
+                <div>
+                  <p className="text-[12px] font-medium text-text-primary">搭配组成</p>
+                  <p className="text-[10px] text-text-tertiary mt-0.5">
+                    记录已有或曾经用过的组合，可从库存选择，也可手动输入
+                  </p>
+                </div>
+                {BUILD_PARTS.map(({ role, label, category: cat }) => (
+                  <div key={role}>
+                    <Label>{label}</Label>
+                    <ComboSelect
+                      value={getBuildPartName(draft.relations, role)}
+                      onChange={(v) => setBuildPartField(role, cat, v)}
+                      options={inventoryNames(inventoryItems, cat)}
+                      placeholder={`选择或输入${label}名称`}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* 次要信息折叠 */}
+              <div className="rounded-xl border border-white/[0.08] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setBuildMoreOpen((o) => !o)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-[12px] text-text-secondary hover:bg-white/[0.04] transition-all"
+                >
+                  <span>更多选项（配列、评分、标签…）</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${buildMoreOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {buildMoreOpen && (
+                  <div className="px-4 pb-4 pt-1 space-y-5 border-t border-white/[0.06]">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>配列</Label>
+                        <ComboSelect
+                          value={draft.layout ?? ''}
+                          onChange={(v) => set('layout', v || undefined)}
+                          options={KEYBOARD_LAYOUTS}
+                          placeholder="65%"
+                        />
+                      </div>
+                      <div>
+                        <Label>结构</Label>
+                        <input
+                          className={inputClass}
+                          value={draft.mount ?? ''}
+                          onChange={(e) => set('mount', e.target.value || undefined)}
+                          placeholder="Gasket"
+                        />
+                      </div>
+                    </div>
+                    <BuildSecondaryFields
+                      draft={draft}
+                      set={set}
+                      setRating={setRating}
+                      computedOverall={computedOverall}
+                      tagInput={tagInput}
+                      setTagInput={setTagInput}
+                      addTag={addTag}
+                      removeTag={removeTag}
+                      suggestedTags={suggestedTags}
+                      inputClass={inputClass}
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>名称</Label>
+                  <SuggestInput
+                    value={draft.name}
+                    onChange={(v) => set('name', v)}
+                    placeholder={draft.category === 'switches' ? '例如 北极星轴' : '例如 Zoom65 V3'}
+                    suffix={draft.category === 'switches' ? '轴' : undefined}
+                  />
+                </div>
+                <div>
+                  <Label>{draft.category === 'keyboards' ? '工作室' : '品牌'}</Label>
+                  <SuggestInput
+                    value={draft.brand}
+                    onChange={(v) => set('brand', v)}
+                    placeholder="例如 Wuque Studio"
+                    completions={
+                      draft.category === 'keyboards'
+                        ? [...studioSuggestions, 'Studio', 'Lab']
+                        : []
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>分类</Label>
+                  <Dropdown
+                    value={draft.category}
+                    onChange={(v) => setCategory(v as ItemCategory)}
+                    options={CATEGORY_OPTIONS}
+                  />
+                </div>
+                <div>
+                  <Label>状态</Label>
+                  <Dropdown
+                    value={draft.status}
+                    onChange={(v) => set('status', v as ItemStatus)}
+                    options={STATUS_OPTIONS}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Specification (non-build) */}
+          {!isBuild && CATEGORY_SPEC_FIELDS[draft.category].length > 0 && (
             <div
               className={`grid gap-4 ${
                 CATEGORY_SPEC_FIELDS[draft.category].length >= 3 ? 'grid-cols-3' : 'grid-cols-2'
@@ -338,6 +561,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
             </div>
           )}
 
+          {!isBuild && (
+            <>
           {/* Purchase / sold price */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -463,6 +688,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
               placeholder="写下你的真实使用体验……"
             />
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}

@@ -228,10 +228,7 @@ export const CATEGORY_SPEC_FIELDS: Record<ItemCategory, SpecFieldConfig[]> = {
     { key: 'spring', label: '弹簧属性', placeholder: '双段长弹簧' },
     { key: 'lube', label: '润滑方案', placeholder: '出厂润 / 手动 205g0' },
   ],
-  builds: [
-    { key: 'layout', label: '配列', placeholder: '65%' },
-    { key: 'mount', label: '结构', placeholder: 'Gasket' },
-  ],
+  builds: [],
 }
 
 export const SPEC_FIELD_LABELS: Record<SpecFieldKey, string> = {

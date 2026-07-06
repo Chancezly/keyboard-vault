@@ -170,6 +170,7 @@ export default function App() {
           isNew={editing.isNew}
           allTags={allTags}
           studioSuggestions={studioSuggestions}
+          inventoryItems={items}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
