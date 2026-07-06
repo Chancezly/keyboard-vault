@@ -1,3 +1,4 @@
+import JSZip from 'jszip'
 import { parseItemMarkdown } from './parser'
 import { serializeItem } from './serialize'
 import type { CollectionItem, ItemCategory, ItemRelation } from './types'
@@ -124,10 +125,13 @@ export async function forgetVaultDirectory(): Promise<void> {
 // ---- Image handling ----
 
 let imageObjectUrls: string[] = []
+// 反查表：显示用的 blob: URL -> 原始文件名，保存时用它还原引用，避免把 URL 当成文件名写回
+let imageNameByUrl = new Map<string, string>()
 
 function revokeImageUrls() {
   imageObjectUrls.forEach((u) => URL.revokeObjectURL(u))
   imageObjectUrls = []
+  imageNameByUrl = new Map()
 }
 
 async function readImageMap(handle: VaultHandle): Promise<Map<string, string>> {
@@ -141,6 +145,7 @@ async function readImageMap(handle: VaultHandle): Promise<Map<string, string>> {
       const url = URL.createObjectURL(file)
       imageObjectUrls.push(url)
       map.set(name, url)
+      imageNameByUrl.set(url, name)
     }
   } catch {
     // no assets/images yet
@@ -227,6 +232,9 @@ async function persistImages(handle: VaultHandle, item: CollectionItem): Promise
       await writable.write(new Blob([decoded.bytes as unknown as BlobPart]))
       await writable.close()
       out.push(fileName)
+    } else if (imageNameByUrl.has(ref)) {
+      // 该图片是从本地读入后生成的 blob: URL，还原成原始文件名
+      out.push(imageNameByUrl.get(ref)!)
     } else if (/^(https?:)?\/\//.test(ref)) {
       out.push(ref)
     } else {
@@ -252,5 +260,57 @@ export async function deleteItemFile(handle: VaultHandle, item: CollectionItem):
     await dir.removeEntry(`${item.id}.md`)
   } catch {
     // already gone
+  }
+}
+
+// ---- Backup / migration (ZIP) ----
+
+async function addDirToZip(
+  dir: FileSystemDirectoryHandleLike,
+  zip: JSZip,
+  prefix: string,
+): Promise<void> {
+  for await (const [name, entry] of dir.entries()) {
+    const path = prefix ? `${prefix}/${name}` : name
+    if (entry.kind === 'file') {
+      const file = await (entry as FileSystemFileHandleLike).getFile()
+      zip.file(path, file)
+    } else {
+      await addDirToZip(entry as FileSystemDirectoryHandleLike, zip, path)
+    }
+  }
+}
+
+// 把整个已连接文件夹打包成 ZIP（md + 图片 + 设置等原样保留）
+export async function exportVaultZip(handle: VaultHandle): Promise<Blob> {
+  const zip = new JSZip()
+  await addDirToZip(handle, zip, '')
+  return zip.generateAsync({ type: 'blob' })
+}
+
+// 把 ZIP 内容写入当前已连接文件夹（同名覆盖），用于换设备快速恢复
+export async function importVaultZip(handle: VaultHandle, file: File): Promise<void> {
+  const zip = await JSZip.loadAsync(file)
+  const files = Object.values(zip.files).filter((f) => !f.dir)
+
+  // 若压缩包内容被包在同一个顶层文件夹里，则自动去掉这层
+  let strip = ''
+  const firsts = new Set(files.map((f) => f.name.split('/')[0]))
+  if (firsts.size === 1 && files.every((f) => f.name.includes('/'))) {
+    strip = `${[...firsts][0]}/`
+  }
+
+  for (const entry of files) {
+    const rel = strip && entry.name.startsWith(strip) ? entry.name.slice(strip.length) : entry.name
+    const parts = rel.split('/').filter(Boolean)
+    if (!parts.length) continue
+    const fileName = parts.pop() as string
+    let dir = handle
+    for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create: true })
+    const content = await entry.async('blob')
+    const fh = await dir.getFileHandle(fileName, { create: true })
+    const writable = await fh.createWritable()
+    await writable.write(content)
+    await writable.close()
   }
 }

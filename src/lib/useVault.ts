@@ -13,6 +13,8 @@ import {
   readVault,
   writeItem,
   deleteItemFile,
+  exportVaultZip,
+  importVaultZip,
   type VaultHandle,
 } from './fs'
 
@@ -30,6 +32,8 @@ export interface VaultState {
   save: (item: CollectionItem) => Promise<void>
   remove: (item: CollectionItem) => Promise<void>
   reload: () => Promise<void>
+  exportZip: () => Promise<void>
+  importZip: (file: File) => Promise<void>
 }
 
 export function useVault(): VaultState {
@@ -137,6 +141,42 @@ export function useVault(): VaultState {
     [mode, handle],
   )
 
+  const exportZip = useCallback(async () => {
+    if (mode !== 'directory' || !handle) return
+    setBusy(true)
+    try {
+      const blob = await exportVaultZip(handle)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const stamp = new Date().toISOString().slice(0, 10)
+      a.href = url
+      a.download = `${handle.name || 'vault'}-backup-${stamp}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [mode, handle])
+
+  const importZip = useCallback(
+    async (file: File) => {
+      if (mode !== 'directory' || !handle) return
+      setBusy(true)
+      setError(null)
+      try {
+        await importVaultZip(handle, file)
+        setItems(await readVault(handle))
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setBusy(false)
+      }
+    },
+    [mode, handle],
+  )
+
   return {
     items,
     mode,
@@ -149,5 +189,7 @@ export function useVault(): VaultState {
     save,
     remove,
     reload,
+    exportZip,
+    importZip,
   }
 }

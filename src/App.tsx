@@ -89,6 +89,8 @@ export default function App() {
         vaultBusy={vault.busy}
         onConnectVault={vault.connect}
         onDisconnectVault={vault.disconnect}
+        onExportZip={vault.exportZip}
+        onImportZip={vault.importZip}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative">

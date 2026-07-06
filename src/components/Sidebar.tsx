@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import {
   Keyboard,
   Layers,
@@ -8,6 +9,8 @@ import {
   HardDrive,
   FolderSync,
   Unplug,
+  Download,
+  Upload,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
 import { CATEGORY_LABELS } from '../lib/types'
@@ -31,6 +34,8 @@ interface SidebarProps {
   vaultBusy: boolean
   onConnectVault: () => void
   onDisconnectVault: () => void
+  onExportZip: () => void
+  onImportZip: (file: File) => void
 }
 
 const NAV_ITEMS: { id: ItemCategory | 'all'; icon: typeof Keyboard; color: string }[] = [
@@ -53,7 +58,10 @@ export function Sidebar({
   vaultBusy,
   onConnectVault,
   onDisconnectVault,
+  onExportZip,
+  onImportZip,
 }: SidebarProps) {
+  const zipInputRef = useRef<HTMLInputElement>(null)
   return (
     <aside className="flex flex-col w-[220px] shrink-0 h-full glass-strong rounded-2xl mx-3 my-3">
       {/* Logo */}
@@ -141,15 +149,48 @@ export function Sidebar({
           </span>
         </button>
         {vaultMode === 'directory' ? (
-          <button
-            onClick={onDisconnectVault}
-            title={`已连接本地文件夹：${vaultDirName ?? ''}（点击断开）`}
-            className="group w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-emerald-300/90 hover:bg-white/[0.04] transition-all"
-          >
-            <HardDrive className="w-4 h-4 shrink-0" />
-            <span className="flex-1 text-left truncate">{vaultDirName ?? '本地文件夹'}</span>
-            <Unplug className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
+          <>
+            <button
+              onClick={onDisconnectVault}
+              title={`已连接本地文件夹：${vaultDirName ?? ''}（点击断开）`}
+              className="group w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-emerald-300/90 hover:bg-white/[0.04] transition-all"
+            >
+              <HardDrive className="w-4 h-4 shrink-0" />
+              <span className="flex-1 text-left truncate">{vaultDirName ?? '本地文件夹'}</span>
+              <Unplug className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+            <div className="flex gap-1">
+              <button
+                onClick={onExportZip}
+                disabled={vaultBusy}
+                title="将整个文件夹（md + 图片）打包为 ZIP 备份"
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>备份</span>
+              </button>
+              <button
+                onClick={() => zipInputRef.current?.click()}
+                disabled={vaultBusy}
+                title="从 ZIP 恢复到当前文件夹（同名覆盖）"
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>导入</span>
+              </button>
+              <input
+                ref={zipInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) onImportZip(f)
+                  e.target.value = ''
+                }}
+              />
+            </div>
+          </>
         ) : (
           <button
             onClick={onConnectVault}
