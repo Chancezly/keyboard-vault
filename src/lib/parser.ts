@@ -8,7 +8,7 @@ import type {
   TagGroup,
   UserPreferences,
 } from './types'
-import { normalizeStatus } from './types'
+import { normalizeStatus, normalizeRatingDetail, RATING_DIMENSIONS } from './types'
 
 interface ItemFrontmatter {
   identity?: {
@@ -109,22 +109,17 @@ function normalizeRelations(relations: ItemFrontmatter['relations']): ItemRelati
 function buildRatingDetail(rating: ItemFrontmatter['rating']): RatingDetail | undefined {
   if (!rating) return undefined
   const scale = rating.scale ?? 5
-  const overall = rating.overall ?? rating.score
-  const hasDimensions =
-    rating.sound != null ||
-    rating.feel != null ||
-    rating.build != null ||
-    rating.aesthetics != null
-  if (overall == null && !hasDimensions) return undefined
-
-  return {
-    overall,
+  const detail: RatingDetail = {
+    overall: rating.overall ?? rating.score,
     sound: rating.sound,
     feel: rating.feel,
     build: rating.build,
     aesthetics: rating.aesthetics,
     scale,
   }
+  const hasDimensions = RATING_DIMENSIONS.some((d) => detail[d] != null)
+  if (detail.overall == null && !hasDimensions) return undefined
+  return normalizeRatingDetail(detail)
 }
 
 export function parseItemMarkdown(

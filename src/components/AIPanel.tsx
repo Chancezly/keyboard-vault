@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   X,
   Sparkles,
@@ -8,49 +10,185 @@ import {
   Send,
   Bot,
   User,
+  Tags,
+  Heart,
+  Settings,
+  Loader2,
+  Key,
+  Check,
 } from 'lucide-react'
+import type { CollectionItem, UserPreferences } from '../lib/types'
+import { buildCollectionContext } from '../lib/ai/context'
+import { chatCompletion, type ChatMessage } from '../lib/ai/deepseek'
+import {
+  systemPrompt,
+  tagUserPrompt,
+  recommendUserPrompt,
+  parseSuggestedTags,
+} from '../lib/ai/prompts'
+import { getApiKey, setApiKey, isConfigured } from '../lib/ai/config'
 
 interface AIPanelProps {
   open: boolean
   onClose: () => void
+  items: CollectionItem[]
+  preferences: UserPreferences
+  allTags: string[]
+  selectedItem?: CollectionItem | null
+  onApplyTags?: (itemId: string, tags: string[]) => void
 }
 
-type AIMode = 'chat' | 'summary' | 'recommend' | 'describe'
+type AIMode = 'chat' | 'summary' | 'recommend' | 'tag' | 'preferences'
+
+interface UIMessage {
+  role: 'user' | 'assistant'
+  content: string
+  suggestedTags?: string[]
+}
 
 const MODES: { id: AIMode; label: string; icon: typeof MessageSquare; description: string }[] = [
-  { id: 'chat', label: '对话', icon: MessageSquare, description: '与 AI 自由对话，了解你的收藏' },
-  { id: 'summary', label: '总结', icon: FileText, description: 'AI 总结收藏概况与趋势' },
-  { id: 'recommend', label: '推荐', icon: Lightbulb, description: '根据库存和偏好推荐搭配' },
-  { id: 'describe', label: '描述', icon: Sparkles, description: 'AI 帮你完善收藏描述' },
+  { id: 'chat', label: '对话', icon: MessageSquare, description: '与 AI 自由对话，结合你的收藏库存回答' },
+  { id: 'summary', label: '总结', icon: FileText, description: '分析收藏结构、品味趋势与库存特点' },
+  { id: 'recommend', label: '推荐', icon: Lightbulb, description: '根据库存和偏好推荐键盘搭配方案' },
+  { id: 'tag', label: '标签', icon: Tags, description: '根据描述自动推荐标签，可应用到收藏' },
+  { id: 'preferences', label: '偏好', icon: Heart, description: '分析显式偏好与实际收藏行为的一致性' },
 ]
 
-const PLACEHOLDER_MESSAGES = [
-  {
-    role: 'assistant' as const,
-    content: '你好！我是 KeyVault AI 助手。我可以帮你总结收藏、推荐搭配、完善描述。第一版暂未接入 AI 能力，敬请期待。',
-  },
-  {
-    role: 'user' as const,
-    content: '帮我推荐一套日常办公的键盘搭配',
-  },
-  {
-    role: 'assistant' as const,
-    content: '根据你的收藏和偏好（65% 布局、线性轴、偏闷声音），推荐你的「日常办公套装」：\n\n• 键盘：Zoom65 V3 (Gasket)\n• 键帽：KCA 极简灰 (PBT)\n• 轴体：Gateron Ink Black V2\n\n这套搭配已经在你的收藏中，是目前最均衡的日常方案。',
-  },
-]
-
-export function AIPanel({ open, onClose }: AIPanelProps) {
+export function AIPanel({
+  open,
+  onClose,
+  items,
+  preferences,
+  allTags,
+  selectedItem,
+  onApplyTags,
+}: AIPanelProps) {
   const [mode, setMode] = useState<AIMode>('chat')
+  const [messages, setMessages] = useState<UIMessage[]>([])
   const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [configured, setConfigured] = useState(isConfigured)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
+
+  const context = useMemo(
+    () => buildCollectionContext(items, preferences, allTags),
+    [items, preferences, allTags],
+  )
+
+  useEffect(() => {
+    if (open) {
+      setConfigured(isConfigured())
+      setApiKeyDraft(getApiKey())
+    }
+  }, [open])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages, loading])
+
+  const runAI = useCallback(
+    async (userContent: string) => {
+      if (!configured) {
+        setShowSettings(true)
+        setError('请先配置 DeepSeek API Key')
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      const prior = messagesRef.current
+      const userMsg: UIMessage = { role: 'user', content: userContent }
+      setMessages([...prior, userMsg])
+
+      try {
+        const history: ChatMessage[] = [
+          { role: 'system', content: systemPrompt(mode, context) },
+          ...prior.map((m) => ({ role: m.role, content: m.content })),
+          { role: 'user', content: userContent },
+        ]
+
+        const reply = await chatCompletion(history)
+        const suggestedTags = mode === 'tag' ? parseSuggestedTags(reply) : undefined
+
+        setMessages((prev) => [...prev, { role: 'assistant', content: reply, suggestedTags }])
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [configured, context, mode],
+  )
+
+  const handleSend = () => {
+    const text = input.trim()
+    if (!text || loading) return
+    setInput('')
+    runAI(text)
+  }
+
+  const handleQuickAction = () => {
+    if (loading) return
+    switch (mode) {
+      case 'summary':
+        runAI('请全面分析我的收藏库，给出洞察总结。')
+        break
+      case 'preferences':
+        runAI('请分析我的用户偏好与实际收藏行为。')
+        break
+      case 'recommend':
+        runAI(recommendUserPrompt(input))
+        setInput('')
+        break
+      case 'tag': {
+        const desc =
+          input.trim() ||
+          (selectedItem
+            ? `${selectedItem.name}（${selectedItem.brand}）\n${selectedItem.content || '暂无体验描述'}`
+            : '')
+        if (!desc) {
+          setError('请先输入描述，或选中一件收藏')
+          return
+        }
+        runAI(tagUserPrompt(desc, selectedItem))
+        setInput('')
+        break
+      }
+    }
+  }
+
+  const saveApiKey = () => {
+    setApiKey(apiKeyDraft)
+    setConfigured(isConfigured())
+    setShowSettings(false)
+    setError(null)
+  }
+
+  const switchMode = (id: AIMode) => {
+    setMode(id)
+    setMessages([])
+    setError(null)
+    setInput('')
+  }
 
   if (!open) return null
 
+  const quickActionLabel: Record<AIMode, string | null> = {
+    chat: null,
+    summary: '分析收藏',
+    recommend: '获取推荐',
+    tag: '生成标签',
+    preferences: '分析偏好',
+  }
+
   return (
-    <div className="
-      flex flex-col w-[380px] shrink-0 h-full
-      glass-strong rounded-2xl mr-3 my-3
-      overflow-hidden
-    ">
+    <div className="flex flex-col w-[400px] shrink-0 h-full glass-strong rounded-2xl mr-3 my-3 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <div className="flex items-center gap-2.5">
@@ -59,25 +197,74 @@ export function AIPanel({ open, onClose }: AIPanelProps) {
           </div>
           <div>
             <h3 className="text-[14px] font-semibold">AI 助手</h3>
-            <p className="text-[10px] text-text-tertiary">Powered by your collection</p>
+            <p className="text-[10px] text-text-tertiary">
+              DeepSeek · {items.length} 件收藏已载入
+            </p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-all"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-1.5 rounded-lg transition-all ${
+              showSettings ? 'bg-accent/20 text-accent' : 'text-text-tertiary hover:text-text-primary hover:bg-white/[0.06]'
+            }`}
+            title="API 设置"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-all"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
+      {/* API Settings */}
+      {showSettings && (
+        <div className="mx-4 mb-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] space-y-2">
+          <div className="flex items-center gap-2 text-[11px] text-text-secondary">
+            <Key className="w-3.5 h-3.5" />
+            DeepSeek API Key
+          </div>
+          <input
+            type="password"
+            value={apiKeyDraft}
+            onChange={(e) => setApiKeyDraft(e.target.value)}
+            placeholder="sk-..."
+            className="w-full px-3 py-2 rounded-lg text-[12px] bg-white/[0.06] border border-white/[0.08] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
+          />
+          <div className="flex items-center justify-between">
+            <a
+              href="https://platform.deepseek.com/api_keys"
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] text-accent hover:underline"
+            >
+              获取 API Key →
+            </a>
+            <button
+              onClick={saveApiKey}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-accent/90 text-white hover:bg-accent transition-all"
+            >
+              <Check className="w-3 h-3" /> 保存
+            </button>
+          </div>
+          <p className="text-[10px] text-text-tertiary leading-relaxed">
+            Key 仅保存在本浏览器 localStorage，不会上传到任何服务器。
+          </p>
+        </div>
+      )}
+
       {/* Mode tabs */}
-      <div className="flex gap-1 px-4 pb-3">
+      <div className="flex flex-wrap gap-1 px-4 pb-3">
         {MODES.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            onClick={() => setMode(id)}
+            onClick={() => switchMode(id)}
             className={`
-              flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium
+              flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
               transition-all duration-200
               ${mode === id
                 ? 'bg-accent/20 text-accent'
@@ -91,78 +278,162 @@ export function AIPanel({ open, onClose }: AIPanelProps) {
         ))}
       </div>
 
-      {/* Mode description */}
-      <div className="px-5 pb-3">
+      <div className="px-5 pb-2">
         <p className="text-[11px] text-text-tertiary leading-relaxed">
           {MODES.find((m) => m.id === mode)?.description}
         </p>
+        {mode === 'tag' && selectedItem && (
+          <p className="text-[10px] text-accent/80 mt-1">
+            当前选中：{selectedItem.name}
+          </p>
+        )}
       </div>
 
-      {/* Chat area */}
-      <div className="flex-1 overflow-y-auto px-4 space-y-4">
-        {PLACEHOLDER_MESSAGES.map((msg, i) => (
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 space-y-4">
+        {messages.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Bot className="w-8 h-8 text-text-tertiary/40 mb-3" />
+            <p className="text-[12px] text-text-tertiary max-w-[240px] leading-relaxed">
+              {mode === 'chat'
+                ? '问我任何关于你收藏的问题，我会结合 vault 里的 Markdown 数据分析。'
+                : `点击下方「${quickActionLabel[mode]}」开始，或在输入框描述需求。`}
+            </p>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`
-              w-6 h-6 rounded-lg shrink-0 flex items-center justify-center
-              ${msg.role === 'assistant' ? 'bg-accent/20' : 'bg-white/10'}
-            `}>
-              {msg.role === 'assistant'
-                ? <Bot className="w-3 h-3 text-accent" />
-                : <User className="w-3 h-3 text-text-secondary" />
-              }
+            <div
+              className={`w-6 h-6 rounded-lg shrink-0 flex items-center justify-center ${
+                msg.role === 'assistant' ? 'bg-accent/20' : 'bg-white/10'
+              }`}
+            >
+              {msg.role === 'assistant' ? (
+                <Bot className="w-3 h-3 text-accent" />
+              ) : (
+                <User className="w-3 h-3 text-text-secondary" />
+              )}
             </div>
-            <div className={`
-              max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[12px] leading-relaxed
-              ${msg.role === 'assistant'
-                ? 'bg-white/[0.04] text-text-secondary rounded-tl-md'
-                : 'bg-accent/15 text-text-primary rounded-tr-md'
-              }
-            `}>
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+            <div
+              className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[12px] leading-relaxed ${
+                msg.role === 'assistant'
+                  ? 'bg-white/[0.04] text-text-secondary rounded-tl-md'
+                  : 'bg-accent/15 text-text-primary rounded-tr-md'
+              }`}
+            >
+              {msg.role === 'assistant' ? (
+                <div className="prose prose-invert prose-sm max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5 [&_strong]:text-text-primary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content.replace(/\{"suggestedTags"[^}]+\}/, '').trim()}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap">{msg.content}</p>
+              )}
+
+              {msg.suggestedTags && msg.suggestedTags.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-white/[0.06]">
+                  <p className="text-[10px] text-text-tertiary mb-1.5">建议标签</p>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {msg.suggestedTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  {selectedItem && onApplyTags && (
+                    <button
+                      onClick={() => onApplyTags(selectedItem.id, msg.suggestedTags!)}
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-all"
+                    >
+                      应用到「{selectedItem.name}」
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
 
-        {/* Coming soon badge */}
-        <div className="flex justify-center py-4">
-          <span className="text-[10px] px-3 py-1.5 rounded-full bg-white/[0.04] text-text-tertiary border border-white/[0.06]">
-            AI 功能即将上线 · 第一版仅展示界面
-          </span>
-        </div>
+        {loading && (
+          <div className="flex gap-2.5 items-center text-text-tertiary">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-[12px]">DeepSeek 思考中…</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-300">
+            {error}
+          </div>
+        )}
       </div>
 
-      {/* Input area */}
-      <div className="p-4 border-t border-white/[0.06]">
+      {/* Input */}
+      <div className="p-4 border-t border-white/[0.06] space-y-2">
+        {quickActionLabel[mode] && (
+          <button
+            onClick={handleQuickAction}
+            disabled={loading || (mode === 'tag' && !input.trim() && !selectedItem)}
+            className="w-full py-2 rounded-xl text-[12px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {quickActionLabel[mode]}
+          </button>
+        )}
+
         <div className="relative">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="输入消息... (第一版暂未接入)"
-            disabled
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && mode === 'chat') {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder={
+              mode === 'chat'
+                ? '输入消息… (Enter 发送)'
+                : mode === 'recommend'
+                  ? '描述使用场景，如「日常办公」「闷声打字」…'
+                  : mode === 'tag'
+                    ? '描述这件收藏的特点、用途、声音…'
+                    : '可选：补充分析方向…'
+            }
+            disabled={loading}
             rows={2}
             className="
               w-full px-4 py-3 pr-12 rounded-xl text-[12px] resize-none
-              bg-white/[0.04] border border-white/[0.06]
+              bg-white/[0.06] border border-white/[0.08]
               text-text-primary placeholder:text-text-tertiary
               focus:outline-none focus:border-accent/30
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all duration-200
+              disabled:opacity-50 transition-all duration-200
             "
           />
-          <button
-            disabled
-            className="
-              absolute right-2.5 bottom-2.5 p-2 rounded-lg
-              bg-accent/30 text-accent/50
-              cursor-not-allowed
-            "
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
+          {mode === 'chat' && (
+            <button
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="
+                absolute right-2.5 bottom-2.5 p-2 rounded-lg
+                bg-accent/90 text-white hover:bg-accent
+                disabled:opacity-40 disabled:cursor-not-allowed transition-all
+              "
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        <p className="text-[10px] text-text-tertiary mt-2 text-center">
-          AI 将读取 vault/ 下的 Markdown 文件理解你的收藏
-        </p>
+
+        {!configured && (
+          <p className="text-[10px] text-amber-400/80 text-center">
+            点击右上角 ⚙ 配置 DeepSeek API Key 后启用
+          </p>
+        )}
       </div>
     </div>
   )

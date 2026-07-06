@@ -6,7 +6,7 @@ import { ItemDetail } from './components/ItemDetail'
 import { ItemEditor } from './components/ItemEditor'
 import { AIPanel } from './components/AIPanel'
 import { EmptyState } from './components/EmptyState'
-import { filterItems, getStats, getAllTags } from './lib/collection'
+import { filterItems, getStats, getAllTags, loadPreferences } from './lib/collection'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
 import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
@@ -25,6 +25,7 @@ export default function App() {
 
   const stats = useMemo(() => getStats(items), [items])
   const allTags = useMemo(() => getAllTags(items), [items])
+  const preferences = useMemo(() => loadPreferences(), [])
   const studioSuggestions = useMemo(
     () =>
       Array.from(
@@ -67,6 +68,15 @@ export default function App() {
   const handleNew = () => {
     const cat: ItemCategory = category === 'all' ? 'keyboards' : category
     setEditing({ item: createBlankItem(cat), isNew: true })
+  }
+
+  const handleApplyTags = async (itemId: string, tags: string[]) => {
+    const item = items.find((i) => i.id === itemId)
+    if (!item) return
+    const merged = Array.from(new Set([...item.tags, ...tags]))
+    const updated = { ...item, tags: merged, tagGroups: [{ group: '', values: merged }] }
+    await vault.save(updated)
+    if (selectedItem?.id === itemId) setSelectedItem(updated)
   }
 
   return (
@@ -135,7 +145,15 @@ export default function App() {
         </div>
       </main>
 
-      <AIPanel open={aiOpen} onClose={() => setAiOpen(false)} />
+      <AIPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        items={items}
+        preferences={preferences}
+        allTags={allTags}
+        selectedItem={selectedItem}
+        onApplyTags={handleApplyTags}
+      />
 
       {selectedItem && !editing && (
         <ItemDetail

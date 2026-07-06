@@ -1,21 +1,20 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Trash2, Download, Plus, Save, Star } from 'lucide-react'
+import { X, Upload, Trash2, Download, Plus, Save } from 'lucide-react'
 import type { CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
 import {
   CATEGORY_LABELS,
   STATUS_LABELS,
   RATING_DIMENSION_LABELS,
+  RATING_DIMENSIONS,
   CATEGORY_SPEC_FIELDS,
   SOUND_TENDENCY_LABELS,
+  computeOverallRating,
+  normalizeRatingDetail,
 } from '../lib/types'
 import { downloadMarkdown } from '../lib/serialize'
 import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
-
-const RATING_OPTIONS: DropdownOption[] = [
-  { value: '', label: '—' },
-  ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) })),
-]
+import { StarRating } from './StarRating'
 
 const CATEGORY_OPTIONS: DropdownOption[] = (Object.keys(CATEGORY_LABELS) as ItemCategory[]).map((c) => ({
   value: c,
@@ -131,13 +130,14 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
   const setCategory = (c: ItemCategory) =>
     setDraft((d) => ({ ...d, category: c, lube: c === 'switches' && !d.lube ? '厂润' : d.lube }))
 
-  const setRating = (dim: 'overall' | 'sound' | 'feel' | 'build' | 'aesthetics', raw: string) => {
-    const value = raw === '' ? undefined : Number(raw)
-    setDraft((d) => ({
-      ...d,
-      ratingDetail: { ...(d.ratingDetail ?? { scale: 5 }), scale: 5, [dim]: value },
-    }))
+  const setRating = (dim: (typeof RATING_DIMENSIONS)[number], value: number | undefined) => {
+    setDraft((d) => {
+      const next = { ...(d.ratingDetail ?? { scale: 5 }), scale: 5, [dim]: value }
+      return { ...d, ratingDetail: normalizeRatingDetail(next) }
+    })
   }
+
+  const computedOverall = computeOverallRating(draft.ratingDetail)
 
   const suggestedTags = allTags.filter((t) => !draft.tags.includes(t))
 
@@ -160,15 +160,13 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
   const removeTag = (tag: string) => set('tags', draft.tags.filter((t) => t !== tag))
 
   const handleSave = () => {
-    const rd = draft.ratingDetail
-    const hasRating =
-      rd && (rd.overall != null || rd.sound != null || rd.feel != null || rd.build != null || rd.aesthetics != null)
+    const rd = normalizeRatingDetail(draft.ratingDetail)
     const normalized: CollectionItem = {
       ...draft,
       name: draft.name.trim() || '未命名',
       tagGroups: draft.tags.length ? [{ group: '', values: draft.tags }] : [],
-      rating: hasRating ? rd?.overall : undefined,
-      ratingDetail: hasRating ? rd : undefined,
+      rating: rd?.overall,
+      ratingDetail: rd,
       soldPrice: draft.status === 'sold' ? draft.soldPrice : undefined,
     }
     onSave(normalized)
@@ -356,28 +354,30 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
 
           {/* Rating */}
           <div>
-            <Label>评分（1 - 5）</Label>
-            {draft.category === 'switches' ? (
-              <div className="space-y-4">
-                <div>
-                  <span className="text-[10px] text-text-tertiary block mb-1.5">总分</span>
-                  <div className="flex items-center gap-1.5">
-                    {[1, 2, 3, 4, 5].map((n) => {
-                      const active = (draft.ratingDetail?.overall ?? 0) >= n
-                      return (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => setRating('overall', draft.ratingDetail?.overall === n ? '' : String(n))}
-                          className="p-0.5 transition-transform hover:scale-110"
-                          aria-label={`${n} 星`}
-                        >
-                          <Star className={`w-6 h-6 ${active ? 'text-amber-400 fill-amber-400' : 'text-white/20'}`} />
-                        </button>
-                      )
-                    })}
-                  </div>
+            <Label>评分</Label>
+            <div className="space-y-4">
+              {computedOverall != null && (
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                  <span className="text-[11px] text-text-tertiary shrink-0">总分</span>
+                  <StarRating value={Math.round(computedOverall)} readonly size="sm" />
+                  <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{computedOverall}</span>
+                  <span className="text-[10px] text-text-tertiary">自动加权</span>
                 </div>
+              )}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {RATING_DIMENSIONS.map((dim) => (
+                  <div key={dim} className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-text-tertiary shrink-0 w-8">
+                      {RATING_DIMENSION_LABELS[dim]}
+                    </span>
+                    <StarRating
+                      value={draft.ratingDetail?.[dim]}
+                      onChange={(v) => setRating(dim, v)}
+                    />
+                  </div>
+                ))}
+              </div>
+              {draft.category === 'switches' && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] text-text-tertiary">音色取向</span>
@@ -392,7 +392,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           draft.soundTendency === n
                             ? 'bg-accent text-white'
-                            : 'bg-white/[0.06] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.1]'
+                            : 'bg-white/[0.06] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.10]'
                         }`}
                       >
                         {SOUND_TENDENCY_LABELS[n]}
@@ -400,29 +400,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, onSave, on
                     ))}
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-5 gap-3">
-                <div>
-                  <span className="text-[10px] text-text-tertiary block mb-1">总分</span>
-                  <Dropdown
-                    value={draft.ratingDetail?.overall != null ? String(draft.ratingDetail.overall) : ''}
-                    onChange={(v) => setRating('overall', v)}
-                    options={RATING_OPTIONS}
-                  />
-                </div>
-                {(['sound', 'feel', 'build', 'aesthetics'] as const).map((dim) => (
-                  <div key={dim}>
-                    <span className="text-[10px] text-text-tertiary block mb-1">{RATING_DIMENSION_LABELS[dim]}</span>
-                    <Dropdown
-                      value={draft.ratingDetail?.[dim] != null ? String(draft.ratingDetail[dim]) : ''}
-                      onChange={(v) => setRating(dim, v)}
-                      options={RATING_OPTIONS}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Tags */}

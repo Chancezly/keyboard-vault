@@ -9,10 +9,12 @@ import {
   RELATION_LABELS,
   HISTORY_LABELS,
   RATING_DIMENSION_LABELS,
+  RATING_DIMENSIONS,
   SOUND_TENDENCY_LABELS,
 } from '../lib/types'
 import { Dropdown } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
+import { StarRating } from './StarRating'
 
 const STATUS_OPTIONS: DropdownOption[] = (Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({
   value: s,
@@ -252,30 +254,24 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                   评分
                 </h3>
                 {item.ratingDetail.overall != null && (
-                  <span className="flex items-center gap-1.5 text-[15px] font-semibold">
-                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                    {item.ratingDetail.overall}
-                    <span className="text-[11px] text-text-tertiary font-normal">/ {item.ratingDetail.scale}</span>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <StarRating value={Math.round(item.ratingDetail.overall)} readonly size="sm" />
+                    <span className="text-[15px] font-semibold text-amber-400 tabular-nums">
+                      {item.ratingDetail.overall}
+                    </span>
+                  </div>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-                {(['sound', 'feel', 'build', 'aesthetics'] as const).map((dim) => {
+                {RATING_DIMENSIONS.map((dim) => {
                   const value = item.ratingDetail?.[dim]
                   if (value == null) return null
-                  const scale = item.ratingDetail?.scale ?? 5
                   return (
-                    <div key={dim} className="flex items-center gap-3">
-                      <span className="text-[11px] text-text-tertiary w-8 shrink-0">
+                    <div key={dim} className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] text-text-tertiary shrink-0">
                         {RATING_DIMENSION_LABELS[dim]}
                       </span>
-                      <div className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-accent/70"
-                          style={{ width: `${(value / scale) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-[11px] text-text-secondary tabular-nums w-6 text-right">{value}</span>
+                      <StarRating value={value} readonly size="sm" />
                     </div>
                   )
                 })}

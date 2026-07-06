@@ -26,6 +26,30 @@ export interface RatingDetail {
   scale: number
 }
 
+export const RATING_DIMENSIONS = ['sound', 'feel', 'build', 'aesthetics'] as const
+export type RatingDimension = (typeof RATING_DIMENSIONS)[number]
+
+/** 各维度等权平均得出总分（仅统计已填维度） */
+export function computeOverallRating(detail: Pick<RatingDetail, RatingDimension> | undefined): number | undefined {
+  if (!detail) return undefined
+  const values = RATING_DIMENSIONS.map((d) => detail[d]).filter((v): v is number => v != null)
+  if (values.length === 0) return undefined
+  const avg = values.reduce((a, b) => a + b, 0) / values.length
+  return Math.round(avg * 10) / 10
+}
+
+/** 有维度评分时自动覆盖 overall，无维度时保留旧数据里的 overall */
+export function normalizeRatingDetail(detail: RatingDetail | undefined): RatingDetail | undefined {
+  if (!detail) return undefined
+  const scale = detail.scale ?? 5
+  const hasDimension = RATING_DIMENSIONS.some((d) => detail[d] != null)
+  if (hasDimension) {
+    return { ...detail, scale, overall: computeOverallRating(detail) }
+  }
+  if (detail.overall != null) return { ...detail, scale }
+  return undefined
+}
+
 export interface TagGroup {
   group: string
   values: string[]

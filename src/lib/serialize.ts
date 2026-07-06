@@ -1,5 +1,6 @@
 import { stringify } from 'yaml'
 import type { CollectionItem } from './types'
+import { normalizeRatingDetail } from './types'
 
 function clean<T extends Record<string, unknown>>(obj: T): Partial<T> {
   const out: Record<string, unknown> = {}
@@ -51,14 +52,15 @@ export function serializeItem(item: CollectionItem): string {
   const relations: Record<string, string> = {}
   for (const rel of item.relations) relations[rel.role] = rel.ref
 
-  const rating = item.ratingDetail
+  const normalizedRating = normalizeRatingDetail(item.ratingDetail)
+  const rating = normalizedRating
     ? clean({
-        overall: item.ratingDetail.overall,
-        sound: item.ratingDetail.sound,
-        feel: item.ratingDetail.feel,
-        build: item.ratingDetail.build,
-        aesthetics: item.ratingDetail.aesthetics,
-        scale: item.ratingDetail.scale,
+        overall: normalizedRating.overall,
+        sound: normalizedRating.sound,
+        feel: normalizedRating.feel,
+        build: normalizedRating.build,
+        aesthetics: normalizedRating.aesthetics,
+        scale: normalizedRating.scale,
       })
     : item.rating != null
       ? { overall: item.rating, scale: 5 }
