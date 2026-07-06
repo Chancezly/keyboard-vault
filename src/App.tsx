@@ -1,0 +1,145 @@
+import { useState, useMemo } from 'react'
+import { Sidebar } from './components/Sidebar'
+import { Header } from './components/Header'
+import { ItemCard } from './components/ItemCard'
+import { ItemDetail } from './components/ItemDetail'
+import { ItemEditor } from './components/ItemEditor'
+import { AIPanel } from './components/AIPanel'
+import { EmptyState } from './components/EmptyState'
+import { filterItems, getStats } from './lib/collection'
+import { createBlankItem } from './lib/store'
+import { useVault } from './lib/useVault'
+import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
+import { CATEGORY_LABELS } from './lib/types'
+
+export default function App() {
+  const vault = useVault()
+  const { items } = vault
+  const [category, setCategory] = useState<ItemCategory | 'all'>('all')
+  const [status, setStatus] = useState<ItemStatus | 'all'>('all')
+  const [search, setSearch] = useState('')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
+  const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
+
+  const stats = useMemo(() => getStats(items), [items])
+
+  const filtered = useMemo(
+    () => filterItems(items, category, status, search),
+    [items, category, status, search],
+  )
+
+  const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
+
+  const handleSave = async (item: CollectionItem) => {
+    await vault.save(item)
+    setEditing(null)
+    setSelectedItem(item)
+  }
+
+  const handleDelete = async (id: string) => {
+    const target = items.find((i) => i.id === id)
+    if (target) await vault.remove(target)
+    setEditing(null)
+    setSelectedItem(null)
+  }
+
+  const handleStatusChange = async (item: CollectionItem, next: ItemStatus) => {
+    const updated = { ...item, status: next }
+    await vault.save(updated)
+    setSelectedItem(updated)
+  }
+
+  const handleNew = () => {
+    const cat: ItemCategory = category === 'all' ? 'keyboards' : category
+    setEditing({ item: createBlankItem(cat), isNew: true })
+  }
+
+  return (
+    <div className="flex h-screen bg-surface overflow-hidden">
+      {/* Ambient background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[-20%] left-[20%] w-[600px] h-[600px] rounded-full bg-accent/[0.04] blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] rounded-full bg-purple-500/[0.03] blur-[100px]" />
+      </div>
+
+      <Sidebar
+        activeCategory={category}
+        onCategoryChange={setCategory}
+        onOpenAI={() => setAiOpen(!aiOpen)}
+        aiOpen={aiOpen}
+        stats={stats}
+        vaultMode={vault.mode}
+        vaultSupported={vault.supported}
+        vaultDirName={vault.dirName}
+        vaultBusy={vault.busy}
+        onConnectVault={vault.connect}
+        onDisconnectVault={vault.disconnect}
+      />
+
+      <main className="flex-1 flex flex-col min-w-0 relative">
+        <Header
+          search={search}
+          onSearchChange={setSearch}
+          status={status}
+          onStatusChange={setStatus}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          resultCount={filtered.length}
+          title={title}
+          onNew={handleNew}
+        />
+
+        <div className="flex-1 overflow-y-auto px-8 pb-8">
+          {filtered.length === 0 ? (
+            <EmptyState search={search} />
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+              {filtered.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onClick={() => setSelectedItem(item)}
+                  viewMode="grid"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 max-w-4xl">
+              {filtered.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onClick={() => setSelectedItem(item)}
+                  viewMode="list"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <AIPanel open={aiOpen} onClose={() => setAiOpen(false)} />
+
+      {selectedItem && !editing && (
+        <ItemDetail
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+          onEdit={() => setEditing({ item: selectedItem, isNew: false })}
+          onStatusChange={(next) => handleStatusChange(selectedItem, next)}
+        />
+      )}
+
+      {editing && (
+        <ItemEditor
+          item={editing.item}
+          isNew={editing.isNew}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  )
+}
