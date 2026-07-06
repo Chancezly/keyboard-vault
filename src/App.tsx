@@ -6,7 +6,7 @@ import { ItemDetail } from './components/ItemDetail'
 import { ItemEditor } from './components/ItemEditor'
 import { AIPanel } from './components/AIPanel'
 import { EmptyState } from './components/EmptyState'
-import { filterItems, getStats } from './lib/collection'
+import { filterItems, getStats, getAllTags } from './lib/collection'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
 import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
@@ -24,6 +24,7 @@ export default function App() {
   const [aiOpen, setAiOpen] = useState(false)
 
   const stats = useMemo(() => getStats(items), [items])
+  const allTags = useMemo(() => getAllTags(items), [items])
 
   const filtered = useMemo(
     () => filterItems(items, category, status, search),
@@ -135,6 +136,7 @@ export default function App() {
         <ItemEditor
           item={editing.item}
           isNew={editing.isNew}
+          allTags={allTags}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}

@@ -9,6 +9,7 @@ import {
   RELATION_LABELS,
   HISTORY_LABELS,
   RATING_DIMENSION_LABELS,
+  SOUND_TENDENCY_LABELS,
 } from '../lib/types'
 
 interface ItemDetailProps {
@@ -136,6 +137,54 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                   <span className="text-[12px] text-text-tertiary ml-2">类型</span>
                 </div>
               ) : null}
+              {item.manufacturer ? (
+                <div>
+                  <span className="text-[14px]">{item.manufacturer}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">代工厂</span>
+                </div>
+              ) : null}
+              {item.actuation ? (
+                <div>
+                  <span className="text-[14px]">{item.actuation}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">触发压力</span>
+                </div>
+              ) : null}
+              {item.bottomOut ? (
+                <div>
+                  <span className="text-[14px]">{item.bottomOut}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">触底压力</span>
+                </div>
+              ) : null}
+              {item.preTravel ? (
+                <div>
+                  <span className="text-[14px]">{item.preTravel}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">触发行程</span>
+                </div>
+              ) : null}
+              {item.bottomTravel ? (
+                <div>
+                  <span className="text-[14px]">{item.bottomTravel}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">触底行程</span>
+                </div>
+              ) : null}
+              {item.spring ? (
+                <div>
+                  <span className="text-[14px]">{item.spring}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">弹簧</span>
+                </div>
+              ) : null}
+              {item.lube ? (
+                <div>
+                  <span className="text-[14px]">{item.lube}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">润滑</span>
+                </div>
+              ) : null}
+              {item.color ? (
+                <div>
+                  <span className="text-[14px]">{item.color}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">颜色</span>
+                </div>
+              ) : null}
               {item.condition ? (
                 <div>
                   <span className="text-[14px]">{item.condition}</span>
@@ -230,6 +279,39 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Sound tendency (switches) */}
+          {item.soundTendency != null && (
+            <div className="px-8 py-6 border-b border-white/[0.06]">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary">
+                  <Star className="w-3.5 h-3.5" />
+                  音色取向
+                </h3>
+                <span className="text-[13px] font-semibold text-accent">
+                  {SOUND_TENDENCY_LABELS[item.soundTendency]}
+                </span>
+              </div>
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <div key={n} className="flex-1 flex flex-col items-center gap-1.5">
+                    <div
+                      className={`w-full h-2 rounded-full ${
+                        n === item.soundTendency ? 'bg-accent' : 'bg-white/[0.06]'
+                      }`}
+                    />
+                    <span
+                      className={`text-[10px] ${
+                        n === item.soundTendency ? 'text-accent font-medium' : 'text-text-tertiary'
+                      }`}
+                    >
+                      {SOUND_TENDENCY_LABELS[n]}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

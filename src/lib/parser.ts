@@ -25,9 +25,18 @@ interface ItemFrontmatter {
     material?: string
     profile?: string
     switchType?: string
+    color?: string
+    actuation?: string
     formFactor?: string
     soundProfile?: string
     feelProfile?: string
+    manufacturer?: string
+    bottomOut?: string
+    preTravel?: string
+    bottomTravel?: string
+    spring?: string
+    lube?: string
+    soundTendency?: number
   }
   state?: {
     status?: string
@@ -164,9 +173,18 @@ export function parseItemMarkdown(
     material: specification.material,
     profile: specification.profile,
     switchType: specification.switchType,
+    color: specification.color,
+    actuation: specification.actuation,
     formFactor: specification.formFactor,
     soundProfile: specification.soundProfile,
     feelProfile: specification.feelProfile,
+    manufacturer: specification.manufacturer,
+    bottomOut: specification.bottomOut,
+    preTravel: specification.preTravel,
+    bottomTravel: specification.bottomTravel,
+    spring: specification.spring,
+    lube: specification.lube,
+    soundTendency: specification.soundTendency,
     relations: normalizeRelations(fm.relations),
     history,
     content,

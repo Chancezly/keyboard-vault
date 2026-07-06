@@ -1,12 +1,19 @@
 import { useRef, useState } from 'react'
 import { X, Upload, Trash2, Download, Plus, Save } from 'lucide-react'
 import type { CollectionItem, ItemCategory, ItemStatus } from '../lib/types'
-import { CATEGORY_LABELS, STATUS_LABELS, RATING_DIMENSION_LABELS } from '../lib/types'
+import {
+  CATEGORY_LABELS,
+  STATUS_LABELS,
+  RATING_DIMENSION_LABELS,
+  CATEGORY_SPEC_FIELDS,
+  SOUND_TENDENCY_LABELS,
+} from '../lib/types'
 import { downloadMarkdown } from '../lib/serialize'
 
 interface ItemEditorProps {
   item: CollectionItem
   isNew: boolean
+  allTags: string[]
   onSave: (item: CollectionItem) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -19,7 +26,7 @@ function Label({ children }: { children: React.ReactNode }) {
 const inputClass =
   'w-full px-3 py-2 rounded-lg text-[13px] bg-white/[0.04] border border-white/[0.08] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:bg-white/[0.06] transition-all'
 
-export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEditorProps) {
+export function ItemEditor({ item, isNew, allTags, onSave, onDelete, onClose }: ItemEditorProps) {
   const [draft, setDraft] = useState<CollectionItem>(item)
   const [tagInput, setTagInput] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -34,6 +41,8 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
       ratingDetail: { ...(d.ratingDetail ?? { scale: 5 }), scale: 5, [dim]: value },
     }))
   }
+
+  const suggestedTags = allTags.filter((t) => !draft.tags.includes(t))
 
   const handleImage = (file: File) => {
     const reader = new FileReader()
@@ -143,24 +152,29 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
             </div>
           </div>
 
-          {/* Specification */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>配列</Label>
-              <input className={inputClass} value={draft.layout ?? ''} onChange={(e) => set('layout', e.target.value || undefined)} placeholder="65%" />
+          {/* Specification (category-specific) */}
+          {CATEGORY_SPEC_FIELDS[draft.category].length > 0 && (
+            <div
+              className={`grid gap-4 ${
+                CATEGORY_SPEC_FIELDS[draft.category].length >= 3 ? 'grid-cols-3' : 'grid-cols-2'
+              }`}
+            >
+              {CATEGORY_SPEC_FIELDS[draft.category].map((field) => (
+                <div key={field.key}>
+                  <Label>{field.label}</Label>
+                  <input
+                    className={inputClass}
+                    value={draft[field.key] ?? ''}
+                    onChange={(e) => set(field.key, e.target.value || undefined)}
+                    placeholder={field.placeholder}
+                  />
+                </div>
+              ))}
             </div>
-            <div>
-              <Label>结构 / 高度</Label>
-              <input className={inputClass} value={draft.mount ?? draft.profile ?? ''} onChange={(e) => set(draft.category === 'keycaps' ? 'profile' : 'mount', e.target.value || undefined)} placeholder="Gasket / Cherry" />
-            </div>
-          </div>
+          )}
 
-          {/* State detail + purchase */}
-          <div className={`grid gap-4 ${draft.status === 'sold' ? 'grid-cols-3' : 'grid-cols-2'}`}>
-            <div>
-              <Label>成色 / 状况</Label>
-              <input className={inputClass} value={draft.condition ?? ''} onChange={(e) => set('condition', e.target.value || undefined)} placeholder="excellent" />
-            </div>
+          {/* Purchase / sold price */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>购买价格 (¥)</Label>
               <input type="number" className={inputClass} value={draft.price ?? ''} onChange={(e) => set('price', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="1899" />
@@ -175,19 +189,65 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
 
           {/* Rating */}
           <div>
-            <Label>评分（0 - 5）</Label>
-            <div className="grid grid-cols-5 gap-3">
-              <div>
-                <span className="text-[10px] text-text-tertiary">总分</span>
-                <input type="number" min={0} max={5} step={0.5} className={inputClass} value={draft.ratingDetail?.overall ?? ''} onChange={(e) => setRating('overall', e.target.value)} />
-              </div>
-              {(['sound', 'feel', 'build', 'aesthetics'] as const).map((dim) => (
-                <div key={dim}>
-                  <span className="text-[10px] text-text-tertiary">{RATING_DIMENSION_LABELS[dim]}</span>
-                  <input type="number" min={0} max={5} step={0.5} className={inputClass} value={draft.ratingDetail?.[dim] ?? ''} onChange={(e) => setRating(dim, e.target.value)} />
+            <Label>评分（1 - 5）</Label>
+            {draft.category === 'switches' ? (
+              <div className="space-y-4">
+                <div className="w-1/3">
+                  <span className="text-[10px] text-text-tertiary">总分</span>
+                  <select className={inputClass} value={draft.ratingDetail?.overall ?? ''} onChange={(e) => setRating('overall', e.target.value)}>
+                    <option value="">—</option>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
                 </div>
-              ))}
-            </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] text-text-tertiary">音色取向</span>
+                    <span className="text-[10px] text-text-tertiary">脆 → 闷</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => set('soundTendency', draft.soundTendency === n ? undefined : n)}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                          draft.soundTendency === n
+                            ? 'bg-accent text-white'
+                            : 'bg-white/[0.04] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.08]'
+                        }`}
+                      >
+                        {SOUND_TENDENCY_LABELS[n]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-5 gap-3">
+                <div>
+                  <span className="text-[10px] text-text-tertiary">总分</span>
+                  <select className={inputClass} value={draft.ratingDetail?.overall ?? ''} onChange={(e) => setRating('overall', e.target.value)}>
+                    <option value="">—</option>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+                {(['sound', 'feel', 'build', 'aesthetics'] as const).map((dim) => (
+                  <div key={dim}>
+                    <span className="text-[10px] text-text-tertiary">{RATING_DIMENSION_LABELS[dim]}</span>
+                    <select className={inputClass} value={draft.ratingDetail?.[dim] ?? ''} onChange={(e) => setRating(dim, e.target.value)}>
+                      <option value="">—</option>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Tags */}
@@ -208,13 +268,32 @@ export function ItemEditor({ item, isNew, onSave, onDelete, onClose }: ItemEdito
             {draft.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {draft.tags.map((tag) => (
-                  <span key={tag} className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-white/[0.06] text-text-secondary">
+                  <span key={tag} className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-accent/15 text-accent">
                     {tag}
                     <button onClick={() => removeTag(tag)} className="hover:text-white">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
                 ))}
+              </div>
+            )}
+
+            {suggestedTags.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-text-tertiary mb-1.5">常用标签（点击添加）</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestedTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => set('tags', [...draft.tags, tag])}
+                      className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-white/[0.04] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.08] hover:text-text-secondary transition-all"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {tag}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

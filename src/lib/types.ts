@@ -54,9 +54,18 @@ export interface CollectionItem {
   material?: string
   profile?: string
   switchType?: string
+  color?: string
+  actuation?: string
   formFactor?: string
   soundProfile?: string
   feelProfile?: string
+  manufacturer?: string
+  bottomOut?: string
+  preTravel?: string
+  bottomTravel?: string
+  spring?: string
+  lube?: string
+  soundTendency?: number
   relations: ItemRelation[]
   history: HistoryEvent[]
   content: string
@@ -135,9 +144,85 @@ export const HISTORY_LABELS: Record<string, string> = {
   lubed: '润轴',
 }
 
+// 轴体音色取向：1=脆 → 5=闷
+export const SOUND_TENDENCY_LABELS: Record<number, string> = {
+  1: '脆',
+  2: '偏脆',
+  3: '中频',
+  4: '偏闷',
+  5: '闷',
+}
+
 export const RATING_DIMENSION_LABELS: Record<string, string> = {
   sound: '声音',
   feel: '手感',
   build: '做工',
   aesthetics: '外观',
+}
+
+export type SpecFieldKey =
+  | 'layout'
+  | 'mount'
+  | 'material'
+  | 'profile'
+  | 'switchType'
+  | 'color'
+  | 'actuation'
+  | 'formFactor'
+  | 'manufacturer'
+  | 'bottomOut'
+  | 'preTravel'
+  | 'bottomTravel'
+  | 'spring'
+  | 'lube'
+
+export interface SpecFieldConfig {
+  key: SpecFieldKey
+  label: string
+  placeholder: string
+}
+
+// 各分类在编辑区展示的规格字段
+export const CATEGORY_SPEC_FIELDS: Record<ItemCategory, SpecFieldConfig[]> = {
+  keyboards: [
+    { key: 'layout', label: '配列', placeholder: '65%' },
+    { key: 'mount', label: '结构', placeholder: 'Gasket' },
+    { key: 'material', label: '材质', placeholder: '铝 / 铜' },
+  ],
+  keycaps: [
+    { key: 'profile', label: '高度', placeholder: 'Cherry / KCA' },
+    { key: 'material', label: '材质', placeholder: 'PBT / ABS' },
+  ],
+  switches: [
+    { key: 'manufacturer', label: '代工厂', placeholder: 'JWK / Gateron' },
+    { key: 'color', label: '颜色', placeholder: '黑 / 白' },
+    { key: 'material', label: '材质', placeholder: 'nylon / PC' },
+    { key: 'actuation', label: '触发压力', placeholder: '50g' },
+    { key: 'bottomOut', label: '触底压力', placeholder: '62g' },
+    { key: 'preTravel', label: '触发行程', placeholder: '2.0mm' },
+    { key: 'bottomTravel', label: '触底行程', placeholder: '4.0mm' },
+    { key: 'spring', label: '弹簧属性', placeholder: '双段长弹簧' },
+    { key: 'lube', label: '润滑方案', placeholder: '出厂润 / 手动 205g0' },
+  ],
+  builds: [
+    { key: 'layout', label: '配列', placeholder: '65%' },
+    { key: 'mount', label: '结构', placeholder: 'Gasket' },
+  ],
+}
+
+export const SPEC_FIELD_LABELS: Record<SpecFieldKey, string> = {
+  layout: '配列',
+  mount: '结构',
+  material: '材质',
+  profile: '高度',
+  switchType: '类型',
+  color: '颜色',
+  actuation: '触发压力',
+  formFactor: '尺寸',
+  manufacturer: '代工厂',
+  bottomOut: '触底压力',
+  preTravel: '触发行程',
+  bottomTravel: '触底行程',
+  spring: '弹簧属性',
+  lube: '润滑方案',
 }

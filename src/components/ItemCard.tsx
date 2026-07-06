@@ -34,8 +34,18 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
               {STATUS_LABELS[item.status]}
             </span>
           </div>
-          <h3 className="text-[15px] font-semibold truncate">{item.name}</h3>
+          <h3 className={`font-semibold truncate ${item.category === 'switches' ? 'text-[16px]' : 'text-[15px]'}`}>
+            {item.name}
+          </h3>
           <div className="flex items-center gap-3 mt-1.5">
+            {item.category === 'switches' && item.manufacturer ? (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-accent/15 text-accent">
+                {item.manufacturer}
+              </span>
+            ) : null}
+            {item.category === 'switches' && item.actuation ? (
+              <span className="text-[12px] font-semibold text-text-secondary">触发 {item.actuation}</span>
+            ) : null}
             {item.rating ? (
               <span className="flex items-center gap-1 text-[12px] text-amber-400">
                 <Star className="w-3 h-3 fill-current" />
@@ -98,8 +108,25 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
       <div className="p-5 space-y-2">
         <div>
           <p className="text-[11px] text-text-tertiary font-medium">{item.brand}</p>
-          <h3 className="text-[15px] font-semibold mt-0.5 leading-snug">{item.name}</h3>
+          <h3 className={`font-semibold mt-0.5 leading-snug ${item.category === 'switches' ? 'text-[17px]' : 'text-[15px]'}`}>
+            {item.name}
+          </h3>
         </div>
+
+        {item.category === 'switches' && (item.manufacturer || item.actuation) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {item.manufacturer ? (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-accent/15 text-accent">
+                {item.manufacturer}
+              </span>
+            ) : null}
+            {item.actuation ? (
+              <span className="text-[12px] font-semibold text-text-secondary">
+                触发 {item.actuation}
+              </span>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           {item.price ? (
