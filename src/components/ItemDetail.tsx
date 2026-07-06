@@ -136,6 +136,9 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-text-tertiary" />
                   <span className="text-[14px]">{item.acquired}</span>
+                  <span className="text-[12px] text-text-tertiary">
+                    {item.category === 'keyboards' ? '购买时间' : '购入'}
+                  </span>
                 </div>
               ) : null}
               {item.layout ? (

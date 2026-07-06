@@ -2,6 +2,8 @@ import JSZip from 'jszip'
 import { parseItemMarkdown } from './parser'
 import { serializeItem } from './serialize'
 import type { CollectionItem, ItemCategory, ItemRelation } from './types'
+import { itemImageBasename } from './imageStore'
+import { fetchImageBytes } from './fetchImage'
 
 const CATEGORIES: ItemCategory[] = ['keyboards', 'keycaps', 'switches', 'builds']
 
@@ -127,11 +129,20 @@ export async function forgetVaultDirectory(): Promise<void> {
 let imageObjectUrls: string[] = []
 // 反查表：显示用的 blob: URL -> 原始文件名，保存时用它还原引用，避免把 URL 当成文件名写回
 let imageNameByUrl = new Map<string, string>()
+// 文件名 -> blob URL，跨 readVault 刷新保留已解析的本地图
+let diskImageByName = new Map<string, string>()
+
+function trackImageUrl(name: string, url: string) {
+  diskImageByName.set(name, url)
+  imageNameByUrl.set(url, name)
+  imageObjectUrls.push(url)
+}
 
 function revokeImageUrls() {
   imageObjectUrls.forEach((u) => URL.revokeObjectURL(u))
   imageObjectUrls = []
   imageNameByUrl = new Map()
+  diskImageByName = new Map()
 }
 
 async function readImageMap(handle: VaultHandle): Promise<Map<string, string>> {
@@ -143,9 +154,8 @@ async function readImageMap(handle: VaultHandle): Promise<Map<string, string>> {
       if (entry.kind !== 'file') continue
       const file = await (entry as FileSystemFileHandleLike).getFile()
       const url = URL.createObjectURL(file)
-      imageObjectUrls.push(url)
       map.set(name, url)
-      imageNameByUrl.set(url, name)
+      trackImageUrl(name, url)
     }
   } catch {
     // no assets/images yet
@@ -153,11 +163,25 @@ async function readImageMap(handle: VaultHandle): Promise<Map<string, string>> {
   return map
 }
 
+async function loadImageByName(handle: VaultHandle, name: string): Promise<string | null> {
+  const cached = diskImageByName.get(name)
+  if (cached) return cached
+  try {
+    const images = await handle.getDirectoryHandle('assets').then((a) => a.getDirectoryHandle('images'))
+    const file = await (images.getFileHandle(name) as Promise<FileSystemFileHandleLike>).then((fh) => fh.getFile())
+    const url = URL.createObjectURL(file)
+    trackImageUrl(name, url)
+    return url
+  } catch {
+    return null
+  }
+}
+
 function resolveImage(ref: string, map: Map<string, string>): string {
   if (!ref) return ''
-  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:')) return ref
+  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return ref
   const name = ref.split('/').pop() ?? ref
-  return map.get(name) ?? ref
+  return map.get(name) ?? diskImageByName.get(name) ?? ref
 }
 
 function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {
@@ -190,8 +214,19 @@ export async function readVault(handle: VaultHandle): Promise<CollectionItem[]> 
       const file = await (entry as FileSystemFileHandleLike).getFile()
       const raw = await file.text()
       const item = parseItemMarkdown(raw, category, `${category}/${name}`)
+      const rawHero = (raw.match(/hero:\s*(.+)/)?.[1] ?? '').trim()
       item.images = item.images.map((ref) => resolveImage(ref, imageMap))
       item.image = item.images[0] ?? ''
+
+      if (rawHero && !item.image.startsWith('blob:') && !/^https?:\/\//.test(item.image)) {
+        const fileName = rawHero.split('/').pop() ?? rawHero
+        const url = await loadImageByName(handle, fileName)
+        if (url) {
+          item.image = url
+          item.images = [url]
+        }
+      }
+
       items.push(item)
     }
   }
@@ -205,7 +240,7 @@ export async function readVault(handle: VaultHandle): Promise<CollectionItem[]> 
     })
   }
 
-  return items.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  return items
 }
 
 // ---- Write ----
@@ -218,34 +253,83 @@ async function ensureDir(handle: VaultHandle, path: string[]): Promise<FileSyste
   return dir
 }
 
+async function fetchRemoteImage(
+  ref: string,
+): Promise<{ ext: string; bytes: Uint8Array } | null> {
+  const fetched = await fetchImageBytes(ref)
+  if (!fetched) return null
+  return { ext: fetched.ext, bytes: fetched.bytes }
+}
+
 async function persistImages(handle: VaultHandle, item: CollectionItem): Promise<string[]> {
-  const out: string[] = []
-  for (let i = 0; i < item.images.length; i++) {
-    const ref = item.images[i]
-    if (ref.startsWith('data:')) {
-      const decoded = decodeDataUrl(ref)
-      if (!decoded) continue
-      const fileName = `${item.id}${i === 0 ? '' : `-${i}`}.${decoded.ext}`
-      const images = await ensureDir(handle, ['assets', 'images'])
-      const fh = await images.getFileHandle(fileName, { create: true })
-      const writable = await fh.createWritable()
-      await writable.write(new Blob([decoded.bytes as unknown as BlobPart]))
-      await writable.close()
-      out.push(fileName)
-    } else if (imageNameByUrl.has(ref)) {
-      // 该图片是从本地读入后生成的 blob: URL，还原成原始文件名
-      out.push(imageNameByUrl.get(ref)!)
-    } else if (/^(https?:)?\/\//.test(ref)) {
-      out.push(ref)
-    } else {
-      out.push(ref.split('/').pop() ?? ref)
+  const ref = item.images[0]
+  if (!ref) return []
+
+  const baseName = itemImageBasename(item)
+
+  if (ref.startsWith('data:')) {
+    const decoded = decodeDataUrl(ref)
+    if (!decoded) throw new Error('主图数据无效，无法写入本地')
+    const fileName = `${baseName}.${decoded.ext}`
+    await writeImageFile(handle, fileName, decoded.bytes)
+    return [fileName]
+  }
+
+  if (ref.startsWith('blob:')) {
+    const known = imageNameByUrl.get(ref)
+    if (known) return [known]
+    try {
+      const res = await fetch(ref)
+      if (!res.ok) throw new Error('blob 读取失败')
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      const mime = res.headers.get('content-type') || 'image/jpeg'
+      const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
+      const fileName = `${baseName}.${ext}`
+      await writeImageFile(handle, fileName, bytes)
+      return [fileName]
+    } catch {
+      throw new Error('主图 blob 无法写入 vault/assets/images/')
     }
   }
-  return out
+
+  if (imageNameByUrl.has(ref)) {
+    return [imageNameByUrl.get(ref)!]
+  }
+
+  if (/^(https?:)?\/\//.test(ref)) {
+    const fetched = await fetchRemoteImage(ref)
+    if (fetched) {
+      const fileName = `${baseName}.${fetched.ext}`
+      await writeImageFile(handle, fileName, fetched.bytes)
+      return [fileName]
+    }
+    throw new Error(`主图无法下载：${ref.split('?')[0].slice(-60)}`)
+  }
+
+  const fileName = ref.split('/').pop() ?? ref
+  if (/\.(png|jpe?g|webp|gif|avif)$/i.test(fileName)) {
+    return [fileName]
+  }
+  return []
+}
+
+async function writeImageFile(handle: VaultHandle, fileName: string, bytes: Uint8Array): Promise<void> {
+  const images = await ensureDir(handle, ['assets', 'images'])
+  const fh = await images.getFileHandle(fileName, { create: true })
+  const writable = await fh.createWritable()
+  await writable.write(new Blob([bytes as unknown as BlobPart]))
+  await writable.close()
+  const file = await fh.getFile()
+  const url = URL.createObjectURL(file)
+  trackImageUrl(fileName, url)
 }
 
 export async function writeItem(handle: VaultHandle, item: CollectionItem): Promise<void> {
+  const hadImage = !!item.images[0]
   const imageRefs = await persistImages(handle, item)
+  if (hadImage && imageRefs.length === 0) {
+    throw new Error('主图未能写入 vault/assets/images/，请重试')
+  }
   const toSerialize: CollectionItem = { ...item, images: imageRefs, image: imageRefs[0] ?? '' }
   const dir = await ensureDir(handle, [item.category])
   const fh = await dir.getFileHandle(`${item.id}.md`, { create: true })

@@ -6,11 +6,23 @@ import { ItemDetail } from './components/ItemDetail'
 import { ItemEditor } from './components/ItemEditor'
 import { AIPanel } from './components/AIPanel'
 import { EmptyState } from './components/EmptyState'
-import { filterItems, getStats, getAllTags, loadPreferences } from './lib/collection'
+import { filterItems, sortItems, getStats, getAllTags, loadPreferences } from './lib/collection'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
-import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
+import type { CollectionItem, ItemCategory, ItemStatus, SortOption } from './lib/types'
 import { CATEGORY_LABELS } from './lib/types'
+
+const SORT_STORAGE_KEY = 'keyvault:sort:v1'
+
+function loadSortPreference(): SortOption {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY)
+    if (raw === 'name' || raw === 'addedAt' || raw === 'acquired') return raw
+  } catch {
+    // ignore
+  }
+  return 'name'
+}
 
 export default function App() {
   const vault = useVault()
@@ -18,6 +30,7 @@ export default function App() {
   const [category, setCategory] = useState<ItemCategory | 'all'>('all')
   const [status, setStatus] = useState<ItemStatus | 'all'>('all')
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<SortOption>(() => loadSortPreference())
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
   const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
@@ -39,10 +52,19 @@ export default function App() {
     [items],
   )
 
-  const filtered = useMemo(
-    () => filterItems(items, category, status, search),
-    [items, category, status, search],
-  )
+  const filtered = useMemo(() => {
+    const list = filterItems(items, category, status, search)
+    return sortItems(list, sortBy)
+  }, [items, category, status, search, sortBy])
+
+  const handleSortChange = (next: SortOption) => {
+    setSortBy(next)
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, next)
+    } catch {
+      // ignore
+    }
+  }
 
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
 
@@ -109,6 +131,8 @@ export default function App() {
           onSearchChange={setSearch}
           status={status}
           onStatusChange={setStatus}
+          sortBy={sortBy}
+          onSortChange={handleSortChange}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           resultCount={filtered.length}
@@ -153,6 +177,12 @@ export default function App() {
         allTags={allTags}
         selectedItem={selectedItem}
         onApplyTags={handleApplyTags}
+        onSaveWishlistItem={async (item) => {
+          const saved = await vault.save(item)
+          setCategory(item.category)
+          setStatus('wishlist')
+          setSelectedItem(saved)
+        }}
       />
 
       {selectedItem && !editing && (

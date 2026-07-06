@@ -49,6 +49,8 @@ interface ItemFrontmatter {
     price?: number
     soldPrice?: number
     currency?: string
+    acquired?: string
+    addedAt?: string
   }
   build?: {
     acquired?: string
@@ -141,7 +143,8 @@ export function parseItemMarkdown(
   const { flat: tags, groups: tagGroups } = normalizeTags(fm.tags)
 
   const acquisition = history.find((h) => h.price != null) ?? history.find((h) => h.date)
-  const acquired = legacyBuild.acquired ?? acquisition?.date
+  const acquired = state.acquired ?? legacyBuild.acquired ?? acquisition?.date
+  const addedAt = state.addedAt
   const price = state.price ?? legacyBuild.price ?? acquisition?.price
   const soldPrice = state.soldPrice
   const currency = state.currency ?? legacyBuild.currency ?? acquisition?.currency ?? 'CNY'
@@ -163,6 +166,7 @@ export function parseItemMarkdown(
     rating: ratingDetail?.overall,
     ratingDetail,
     acquired,
+    addedAt,
     price,
     soldPrice,
     currency,

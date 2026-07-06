@@ -1,5 +1,5 @@
 import { parseItemMarkdown, parsePreferencesMarkdown } from './parser'
-import type { CollectionItem, ItemCategory, UserPreferences } from './types'
+import type { CollectionItem, ItemCategory, SortOption, UserPreferences } from './types'
 
 const itemModules = import.meta.glob('../../vault/**/*.md', {
   query: '?raw',
@@ -23,6 +23,10 @@ function resolveImage(ref: string): string {
   if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:')) return ref
   const name = ref.split('/').pop() ?? ref
   return imageByName.get(name) ?? ref
+}
+
+export function resolveBundledImageRef(ref: string): string {
+  return resolveImage(ref)
 }
 
 function extractCategory(path: string): ItemCategory | null {
@@ -56,7 +60,7 @@ export function loadCollection(): CollectionItem[] {
     })
   }
 
-  return items.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  return items
 }
 
 export function loadPreferences(): UserPreferences {
@@ -101,6 +105,36 @@ export function filterItems(
       item.content.toLowerCase().includes(q)
     )
   })
+}
+
+function sortDateKey(value?: string): number {
+  if (!value) return 0
+  const t = Date.parse(value)
+  return Number.isNaN(t) ? 0 : t
+}
+
+export function sortItems(items: CollectionItem[], sortBy: SortOption): CollectionItem[] {
+  const sorted = [...items]
+  switch (sortBy) {
+    case 'name':
+      sorted.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+      break
+    case 'addedAt':
+      sorted.sort(
+        (a, b) =>
+          sortDateKey(b.addedAt) - sortDateKey(a.addedAt) ||
+          a.name.localeCompare(b.name, 'zh-CN'),
+      )
+      break
+    case 'acquired':
+      sorted.sort(
+        (a, b) =>
+          sortDateKey(b.acquired) - sortDateKey(a.acquired) ||
+          a.name.localeCompare(b.name, 'zh-CN'),
+      )
+      break
+  }
+  return sorted
 }
 
 export function getStats(items: CollectionItem[]) {

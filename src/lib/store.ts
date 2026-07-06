@@ -1,5 +1,6 @@
 import { loadCollection } from './collection'
 import type { CollectionItem, ItemRelation } from './types'
+import { resolveLocalImageRef } from './imageStore'
 
 const LS_OVERRIDES = 'keyvault:overrides:v1'
 const LS_CUSTOM = 'keyvault:custom:v1'
@@ -37,6 +38,13 @@ function resolveRelations(items: CollectionItem[]): CollectionItem[] {
   })
 }
 
+function resolveItemImages(item: CollectionItem): CollectionItem {
+  const hero = item.images[0]
+  if (!hero) return { ...item, images: [], image: '' }
+  const resolved = resolveLocalImageRef(hero)
+  return { ...item, images: [resolved], image: resolved }
+}
+
 export function getEffectiveItems(): CollectionItem[] {
   const overrides = read<Record<string, CollectionItem>>(LS_OVERRIDES, {})
   const custom = read<CollectionItem[]>(LS_CUSTOM, [])
@@ -48,7 +56,7 @@ export function getEffectiveItems(): CollectionItem[] {
     .map((i) => overrides[i.id] ?? i)
 
   const all = [...merged, ...custom.filter((c) => !deletedSet.has(c.id))]
-  return resolveRelations(all).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  return resolveRelations(all.map(resolveItemImages))
 }
 
 export function isCustom(id: string): boolean {
@@ -120,6 +128,7 @@ export function createBlankItem(category: CollectionItem['category']): Collectio
     history: [],
     content: '',
     currency: 'CNY',
+    addedAt: new Date().toISOString().slice(0, 10),
     filePath: `../../vault/${category}/${id}.md`,
   }
 }

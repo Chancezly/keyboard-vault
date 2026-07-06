@@ -70,6 +70,8 @@ export interface CollectionItem {
   rating?: number
   ratingDetail?: RatingDetail
   acquired?: string
+  /** 加入收藏库日期 YYYY-MM-DD */
+  addedAt?: string
   price?: number
   soldPrice?: number
   currency?: string
@@ -129,6 +131,14 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
   collection: '收藏中',
   wishlist: '心愿单',
   sold: '已售出',
+}
+
+export type SortOption = 'name' | 'addedAt' | 'acquired'
+
+export const SORT_LABELS: Record<SortOption, string> = {
+  name: '按名称',
+  addedAt: '按添加时间',
+  acquired: '按购买时间',
 }
 
 export const STATUS_COLORS: Record<ItemStatus, string> = {

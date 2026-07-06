@@ -303,6 +303,16 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
     onSave(normalized)
   }
 
+  const handleDelete = () => {
+    if (isNew) {
+      if (window.confirm('确定放弃新建？')) onClose()
+      return
+    }
+    if (!window.confirm(`确定删除「${draft.name || '此收藏'}」？此操作不可撤销。`)) return
+    onDelete(draft.id)
+    onClose()
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -605,8 +615,19 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
 
           {!isBuild && (
             <>
-          {/* Purchase / sold price */}
+          {/* Purchase date (keyboards) / price */}
           <div className="grid grid-cols-2 gap-4">
+            {draft.category === 'keyboards' && (
+              <div>
+                <Label>购买时间</Label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={draft.acquired ?? ''}
+                  onChange={(e) => set('acquired', e.target.value || undefined)}
+                />
+              </div>
+            )}
             <div>
               <Label>购买价格 (¥)</Label>
               <input type="number" className={inputClass} value={draft.price ?? ''} onChange={(e) => set('price', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="1899" />
@@ -737,14 +758,12 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-white/[0.06]">
           <div className="flex items-center gap-2">
-            {!isNew && (
-              <button
-                onClick={() => onDelete(draft.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] text-red-300/80 hover:text-red-300 hover:bg-red-500/10 transition-all"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> 删除
-              </button>
-            )}
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] text-red-300/80 hover:text-red-300 hover:bg-red-500/10 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> {isNew ? '放弃' : '删除'}
+            </button>
             <button
               onClick={() => downloadMarkdown(draft)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-all"

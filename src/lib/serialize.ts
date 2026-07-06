@@ -56,6 +56,8 @@ export function serializeItem(item: CollectionItem): string {
           price: item.price,
           soldPrice: item.status === 'sold' ? item.soldPrice : undefined,
           currency: item.price != null || item.soldPrice != null ? item.currency : undefined,
+          acquired: item.acquired,
+          addedAt: item.addedAt,
         })
 
   const relations: Record<string, string> = {}

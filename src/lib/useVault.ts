@@ -17,6 +17,7 @@ import {
   importVaultZip,
   type VaultHandle,
 } from './fs'
+import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -29,7 +30,7 @@ export interface VaultState {
   error: string | null
   connect: () => Promise<void>
   disconnect: () => Promise<void>
-  save: (item: CollectionItem) => Promise<void>
+  save: (item: CollectionItem) => Promise<CollectionItem>
   remove: (item: CollectionItem) => Promise<void>
   reload: () => Promise<void>
   exportZip: () => Promise<void>
@@ -62,6 +63,12 @@ export function useVault(): VaultState {
   }, [])
 
   // Try to restore a previously connected directory on first load.
+  useEffect(() => {
+    hydrateImageCache()
+      .then(() => setItems(getEffectiveItems()))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (!supported) return
     let cancelled = false
@@ -102,20 +109,28 @@ export function useVault(): VaultState {
   }, [mode, handle])
 
   const save = useCallback(
-    async (item: CollectionItem) => {
+    async (item: CollectionItem): Promise<CollectionItem> => {
       if (mode === 'directory' && handle) {
         setBusy(true)
+        setError(null)
         try {
           await writeItem(handle, item)
-          setItems(await readVault(handle))
+          const loaded = await readVault(handle)
+          setItems(loaded)
+          return loaded.find((i) => i.id === item.id) ?? item
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e))
+          const message = e instanceof Error ? e.message : String(e)
+          setError(message)
+          throw e instanceof Error ? e : new Error(message)
         } finally {
           setBusy(false)
         }
       } else {
-        upsertLocal(item)
+        const withImage = await persistHeroToImageStore(item)
+        const saved = { ...item, ...withImage }
+        upsertLocal(saved)
         setItems(getEffectiveItems())
+        return getEffectiveItems().find((i) => i.id === item.id) ?? saved
       }
     },
     [mode, handle],

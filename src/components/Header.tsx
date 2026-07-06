@@ -1,6 +1,6 @@
 import { Search, LayoutGrid, List, Plus } from 'lucide-react'
-import type { ItemStatus } from '../lib/types'
-import { STATUS_LABELS } from '../lib/types'
+import type { ItemStatus, SortOption } from '../lib/types'
+import { STATUS_LABELS, SORT_LABELS } from '../lib/types'
 import { Dropdown } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
 
@@ -9,11 +9,18 @@ const STATUS_FILTER_OPTIONS: DropdownOption[] = [
   ...(Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({ value: s, label: STATUS_LABELS[s] })),
 ]
 
+const SORT_OPTIONS: DropdownOption[] = (Object.keys(SORT_LABELS) as SortOption[]).map((s) => ({
+  value: s,
+  label: SORT_LABELS[s],
+}))
+
 interface HeaderProps {
   search: string
   onSearchChange: (v: string) => void
   status: ItemStatus | 'all'
   onStatusChange: (s: ItemStatus | 'all') => void
+  sortBy: SortOption
+  onSortChange: (s: SortOption) => void
   viewMode: 'grid' | 'list'
   onViewModeChange: (m: 'grid' | 'list') => void
   resultCount: number
@@ -26,6 +33,8 @@ export function Header({
   onSearchChange,
   status,
   onStatusChange,
+  sortBy,
+  onSortChange,
   viewMode,
   onViewModeChange,
   resultCount,
@@ -57,6 +66,14 @@ export function Header({
             "
           />
         </div>
+
+        {/* Sort */}
+        <Dropdown
+          value={sortBy}
+          onChange={(v) => onSortChange(v as SortOption)}
+          options={SORT_OPTIONS}
+          fullWidth={false}
+        />
 
         {/* Status filter */}
         <Dropdown
