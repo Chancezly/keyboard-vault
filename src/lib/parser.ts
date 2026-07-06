@@ -22,6 +22,9 @@ interface ItemFrontmatter {
   specification?: {
     layout?: string
     mount?: string
+    plate?: string
+    filling?: string
+    weight?: string
     material?: string
     profile?: string
     switchType?: string
@@ -165,7 +168,10 @@ export function parseItemMarkdown(
     currency,
     layout: specification.layout,
     mount: specification.mount,
-    material: specification.material,
+    plate: specification.plate,
+    filling: specification.filling,
+    weight: specification.weight ?? (category === 'keyboards' ? specification.material : undefined),
+    material: category === 'keyboards' ? undefined : specification.material,
     profile: specification.profile,
     switchType: specification.switchType,
     color: specification.color,

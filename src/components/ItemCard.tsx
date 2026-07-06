@@ -1,6 +1,6 @@
 import { Star } from 'lucide-react'
 import type { CollectionItem } from '../lib/types'
-import { STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS } from '../lib/types'
+import { STATUS_LABELS, STATUS_BADGE_COLORS, CATEGORY_LABELS } from '../lib/types'
 import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
 
 interface ItemCardProps {
@@ -41,7 +41,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
             {!isBuild && (
               <>
                 <span className="text-[11px] text-text-tertiary">{item.brand}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${STATUS_COLORS[item.status]}`}>
+                <span className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold ${STATUS_BADGE_COLORS[item.status]}`}>
                   {STATUS_LABELS[item.status]}
                 </span>
               </>
@@ -113,12 +113,12 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
 
         {/* Status badge */}
         {!isBuild && (
-          <span className={`absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded-lg font-medium backdrop-blur-md ${STATUS_COLORS[item.status]}`}>
+          <span className={`absolute top-3 left-3 z-10 text-[12px] px-3 py-1.5 rounded-xl font-semibold backdrop-blur-md shadow-lg ${STATUS_BADGE_COLORS[item.status]}`}>
             {STATUS_LABELS[item.status]}
           </span>
         )}
         {isBuild && (
-          <span className="absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded-lg font-medium backdrop-blur-md bg-amber-500/20 text-amber-300">
+          <span className="absolute top-3 left-3 z-10 text-[12px] px-3 py-1.5 rounded-xl font-semibold backdrop-blur-md shadow-lg bg-amber-500/90 text-white shadow-amber-500/30">
             搭配
           </span>
         )}

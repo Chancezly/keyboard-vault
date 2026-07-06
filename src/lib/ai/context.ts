@@ -14,6 +14,9 @@ function itemSummary(item: CollectionItem): Record<string, unknown> {
   }
 
   if (item.layout) base.layout = item.layout
+  if (item.plate) base.plate = item.plate
+  if (item.filling) base.filling = item.filling
+  if (item.weight) base.weight = item.weight
   if (item.mount) base.mount = item.mount
   if (item.material) base.material = item.material
   if (item.profile) base.profile = item.profile
@@ -76,14 +79,14 @@ export function buildCollectionContext(
     allTags.length ? allTags.join(', ') : '（暂无）',
     '',
     '## 收藏统计',
-    `- 总计 ${items.length} 件：键盘 ${byCategory.keyboards.length}、键帽 ${byCategory.keycaps.length}、轴体 ${byCategory.switches.length}、搭配 ${byCategory.builds.length}`,
+    `- 总计 ${items.length} 件：套件 ${byCategory.keyboards.length}、键帽 ${byCategory.keycaps.length}、轴体 ${byCategory.switches.length}、搭配 ${byCategory.builds.length}`,
     `- 使用中 ${items.filter((i) => i.status === 'in-use').length}、收藏中 ${items.filter((i) => i.status === 'collection').length}、心愿单 ${items.filter((i) => i.status === 'wishlist').length}`,
     '',
   ]
 
   for (const [cat, list] of Object.entries(byCategory) as [keyof typeof byCategory, CollectionItem[]][]) {
     if (!list.length) continue
-    const label = { keyboards: '键盘', keycaps: '键帽', switches: '轴体', builds: '搭配' }[cat]
+    const label = { keyboards: '套件', keycaps: '键帽', switches: '轴体', builds: '搭配' }[cat]
     sections.push(`## ${label}（${list.length}）`)
     sections.push(JSON.stringify(list.map(itemSummary), null, 2))
     sections.push('')

@@ -144,7 +144,25 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                   <span className="text-[12px] text-text-tertiary ml-2">配列</span>
                 </div>
               ) : null}
-              {item.mount ? (
+              {item.weight ? (
+                <div>
+                  <span className="text-[14px]">{item.weight}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">配重</span>
+                </div>
+              ) : null}
+              {item.plate ? (
+                <div>
+                  <span className="text-[14px]">{item.plate}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">定位板</span>
+                </div>
+              ) : null}
+              {item.filling ? (
+                <div>
+                  <span className="text-[14px]">{item.filling}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">填充</span>
+                </div>
+              ) : null}
+              {item.mount && item.category !== 'keyboards' ? (
                 <div>
                   <span className="text-[14px]">{item.mount}</span>
                   <span className="text-[12px] text-text-tertiary ml-2">结构</span>

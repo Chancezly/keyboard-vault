@@ -10,6 +10,9 @@ import {
   SOUND_TENDENCY_LABELS,
   computeOverallRating,
   normalizeRatingDetail,
+  PLATE_OPTIONS,
+  FILLING_OPTIONS,
+  WEIGHT_OPTIONS,
 } from '../lib/types'
 import { BUILD_PARTS, getBuildPartName, setBuildPart, inventoryNames } from '../lib/builds'
 import { downloadMarkdown } from '../lib/serialize'
@@ -370,7 +373,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                 </div>
               </div>
 
-              {/* 核心：键盘 + 键帽 + 轴体 */}
+              {/* 核心：套件 + 键帽 + 轴体 */}
               <div className="p-4 rounded-xl bg-accent/5 border border-accent/15 space-y-4">
                 <div>
                   <p className="text-[12px] font-medium text-text-primary">搭配组成</p>
@@ -501,6 +504,45 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                         value={(draft.layout as string) ?? ''}
                         onChange={(v) => set('layout', v || undefined)}
                         options={KEYBOARD_LAYOUTS}
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  )
+                }
+                if (field.key === 'plate') {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <ComboSelect
+                        value={(draft.plate as string) ?? ''}
+                        onChange={(v) => set('plate', v || undefined)}
+                        options={PLATE_OPTIONS}
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  )
+                }
+                if (field.key === 'filling') {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <ComboSelect
+                        value={(draft.filling as string) ?? ''}
+                        onChange={(v) => set('filling', v || undefined)}
+                        options={FILLING_OPTIONS}
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  )
+                }
+                if (field.key === 'weight') {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <ComboSelect
+                        value={(draft.weight as string) ?? ''}
+                        onChange={(v) => set('weight', v || undefined)}
+                        options={WEIGHT_OPTIONS}
                         placeholder={field.placeholder}
                       />
                     </div>

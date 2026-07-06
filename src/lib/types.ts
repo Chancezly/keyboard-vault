@@ -75,6 +75,9 @@ export interface CollectionItem {
   currency?: string
   layout?: string
   mount?: string
+  plate?: string
+  filling?: string
+  weight?: string
   material?: string
   profile?: string
   switchType?: string
@@ -115,7 +118,7 @@ export interface FilterState {
 }
 
 export const CATEGORY_LABELS: Record<ItemCategory, string> = {
-  keyboards: '键盘',
+  keyboards: '套件',
   keycaps: '键帽',
   switches: '轴体',
   builds: '搭配',
@@ -135,6 +138,14 @@ export const STATUS_COLORS: Record<ItemStatus, string> = {
   sold: 'bg-zinc-500/20 text-zinc-400',
 }
 
+// 卡片封面上的状态徽章：更高对比度、更易辨认
+export const STATUS_BADGE_COLORS: Record<ItemStatus, string> = {
+  'in-use': 'bg-emerald-500/90 text-white shadow-emerald-500/30',
+  collection: 'bg-accent/90 text-white shadow-accent/30',
+  wishlist: 'bg-amber-500/90 text-white shadow-amber-500/30',
+  sold: 'bg-zinc-600/90 text-zinc-100 shadow-black/30',
+}
+
 // 兼容旧数据里的状态取值
 export const LEGACY_STATUS_MAP: Record<string, ItemStatus> = {
   owned: 'collection',
@@ -150,7 +161,7 @@ export function normalizeStatus(raw?: string): ItemStatus {
 }
 
 export const RELATION_LABELS: Record<string, string> = {
-  keyboard: '键盘',
+  keyboard: '套件',
   keycaps: '键帽',
   switches: '轴体',
   stabilizers: '卫星轴',
@@ -184,9 +195,16 @@ export const RATING_DIMENSION_LABELS: Record<string, string> = {
   aesthetics: '外观',
 }
 
+export const PLATE_OPTIONS = ['Fr4', '铝', 'PP', 'PC', '碳纤维', '铜']
+export const FILLING_OPTIONS = ['全棉', '无棉']
+export const WEIGHT_OPTIONS = ['无', '铝', '铜', '刀纹', 'PVD']
+
 export type SpecFieldKey =
   | 'layout'
   | 'mount'
+  | 'plate'
+  | 'filling'
+  | 'weight'
   | 'material'
   | 'profile'
   | 'switchType'
@@ -210,8 +228,9 @@ export interface SpecFieldConfig {
 export const CATEGORY_SPEC_FIELDS: Record<ItemCategory, SpecFieldConfig[]> = {
   keyboards: [
     { key: 'layout', label: '配列', placeholder: '65%' },
-    { key: 'mount', label: '结构', placeholder: 'Gasket' },
-    { key: 'material', label: '材质', placeholder: '铝 / 铜' },
+    { key: 'weight', label: '配重', placeholder: '铝' },
+    { key: 'plate', label: '定位板', placeholder: 'Fr4' },
+    { key: 'filling', label: '填充', placeholder: '全棉' },
   ],
   keycaps: [
     { key: 'profile', label: '高度', placeholder: 'Cherry / KCA' },
@@ -234,6 +253,9 @@ export const CATEGORY_SPEC_FIELDS: Record<ItemCategory, SpecFieldConfig[]> = {
 export const SPEC_FIELD_LABELS: Record<SpecFieldKey, string> = {
   layout: '配列',
   mount: '结构',
+  plate: '定位板',
+  filling: '填充',
+  weight: '配重',
   material: '材质',
   profile: '高度',
   switchType: '类型',

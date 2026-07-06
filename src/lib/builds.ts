@@ -1,7 +1,7 @@
 import type { CollectionItem, ItemCategory, ItemRelation } from './types'
 
 export const BUILD_PARTS = [
-  { role: 'keyboard', label: '键盘', category: 'keyboards' as ItemCategory },
+  { role: 'keyboard', label: '套件', category: 'keyboards' as ItemCategory },
   { role: 'keycaps', label: '键帽', category: 'keycaps' as ItemCategory },
   { role: 'switches', label: '轴体', category: 'switches' as ItemCategory },
 ]
