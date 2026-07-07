@@ -111,7 +111,7 @@ export interface UserPreferences {
   notes: string
 }
 
-export type ViewMode = 'grid' | 'list'
+export type ViewMode = 'grid' | 'list' | 'table'
 
 export interface FilterState {
   category: ItemCategory | 'all'

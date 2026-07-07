@@ -6,6 +6,7 @@ import { ItemDetail } from './components/ItemDetail'
 import { ItemEditor } from './components/ItemEditor'
 import { AIPanel } from './components/AIPanel'
 import { EmptyState } from './components/EmptyState'
+import { DataTableView } from './components/DataTableView'
 import { filterItems, sortItems, getStats, getAllTags, loadPreferences } from './lib/collection'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
@@ -31,7 +32,7 @@ export default function App() {
   const [status, setStatus] = useState<ItemStatus | 'all'>('all')
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>(() => loadSortPreference())
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid')
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
   const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
@@ -140,11 +141,34 @@ export default function App() {
           onNew={handleNew}
         />
 
-        <div className="flex-1 overflow-y-auto px-8 pb-8">
-          {filtered.length === 0 ? (
+        <div className="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
+          {viewMode === 'table' ? (
+            category === 'all' ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
+                <p className="text-[15px] text-text-secondary">表格管理需要选定分类</p>
+                <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
+                  请在左侧选择「套件」「键帽」或「轴体」，即可横向浏览并批量编辑所有条目。
+                </p>
+              </div>
+            ) : category === 'builds' ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
+                <p className="text-[15px] text-text-secondary">搭配暂不支持表格编辑</p>
+                <p className="text-[13px] text-text-tertiary mt-2">请切换回卡片或列表视图，或选择其他分类。</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <EmptyState search={search} />
+            ) : (
+              <DataTableView
+                items={filtered}
+                category={category}
+                busy={vault.busy}
+                onSave={vault.save}
+              />
+            )
+          ) : filtered.length === 0 ? (
             <EmptyState search={search} />
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
               {filtered.map((item) => (
                 <ItemCard
                   key={item.id}

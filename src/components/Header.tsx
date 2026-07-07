@@ -1,4 +1,4 @@
-import { Search, LayoutGrid, List, Plus } from 'lucide-react'
+import { Search, LayoutGrid, List, Plus, Table2 } from 'lucide-react'
 import type { ItemStatus, SortOption } from '../lib/types'
 import { STATUS_LABELS, SORT_LABELS } from '../lib/types'
 import { Dropdown } from './Dropdown'
@@ -21,8 +21,8 @@ interface HeaderProps {
   onStatusChange: (s: ItemStatus | 'all') => void
   sortBy: SortOption
   onSortChange: (s: SortOption) => void
-  viewMode: 'grid' | 'list'
-  onViewModeChange: (m: 'grid' | 'list') => void
+  viewMode: 'grid' | 'list' | 'table'
+  onViewModeChange: (m: 'grid' | 'list' | 'table') => void
   resultCount: number
   title: string
   onNew: () => void
@@ -96,6 +96,13 @@ export function Header({
             className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white/10 text-text-primary' : 'text-text-tertiary hover:text-text-secondary'}`}
           >
             <List className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onViewModeChange('table')}
+            title="表格管理"
+            className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white/10 text-text-primary' : 'text-text-tertiary hover:text-text-secondary'}`}
+          >
+            <Table2 className="w-4 h-4" />
           </button>
         </div>
 

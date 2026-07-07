@@ -1,8 +1,9 @@
 import { Star } from 'lucide-react'
 import { formatRating } from './StarRating'
 import type { CollectionItem } from '../lib/types'
-import { STATUS_LABELS, STATUS_BADGE_COLORS, CATEGORY_LABELS } from '../lib/types'
+import { STATUS_LABELS, STATUS_BADGE_COLORS } from '../lib/types'
 import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
+import { getCardEyebrow, getCardMetrics } from '../lib/cardHighlights'
 
 interface ItemCardProps {
   item: CollectionItem
@@ -10,8 +11,67 @@ interface ItemCardProps {
   viewMode: 'grid' | 'list'
 }
 
+function SpecMetric({
+  label,
+  value,
+  primary,
+  align = 'start',
+}: {
+  label: string
+  value: string
+  primary?: boolean
+  align?: 'start' | 'end'
+}) {
+  return (
+    <div className={`flex flex-col gap-0.5 min-w-0 ${align === 'end' ? 'items-end text-right' : ''}`}>
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
+        {label}
+      </span>
+      <span
+        className={`truncate max-w-[140px] ${
+          primary
+            ? 'text-[15px] font-semibold text-text-primary tabular-nums tracking-tight'
+            : 'text-[13px] font-medium text-text-secondary'
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function CardMetrics({
+  item,
+  layout,
+}: {
+  item: CollectionItem
+  layout: 'grid' | 'list-trailing'
+}) {
+  const metrics = getCardMetrics(item)
+  if (!metrics.length) return null
+
+  if (layout === 'list-trailing') {
+    return (
+      <div className="flex items-center gap-5 shrink-0">
+        {metrics.map((m) => (
+          <SpecMetric key={m.key} label={m.label} value={m.value} primary={m.primary} align="end" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex gap-6 pt-3.5 mt-3.5 border-t border-white/[0.06]">
+      {metrics.map((m) => (
+        <SpecMetric key={m.key} label={m.label} value={m.value} primary={m.primary} />
+      ))}
+    </div>
+  )
+}
+
 export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
   const isBuild = item.category === 'builds'
+  const eyebrow = getCardEyebrow(item)
   const buildParts = isBuild
     ? BUILD_PARTS.map(({ role, label }) => {
         const name = getBuildPartName(item.relations, role)
@@ -24,68 +84,52 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
       <button
         onClick={onClick}
         className="
-          w-full flex items-center gap-5 p-4 rounded-2xl
-          glass hover:bg-white/[0.08] hover:border-white/12
+          w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl
+          bg-white/[0.03] hover:bg-white/[0.06]
+          border border-white/[0.06] hover:border-white/10
           transition-all duration-300 text-left group
         "
       >
-        <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-white/[0.04]">
+        <div className="w-[68px] h-[68px] rounded-[14px] overflow-hidden shrink-0 bg-white/[0.04] ring-1 ring-white/[0.06]">
           <img
             src={item.image}
             alt={item.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500 ease-out"
             loading="lazy"
           />
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            {!isBuild && (
-              <>
-                <span className="text-[11px] text-text-tertiary">{item.brand}</span>
-                <span className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold ${STATUS_BADGE_COLORS[item.status]}`}>
-                  {STATUS_LABELS[item.status]}
-                </span>
-              </>
-            )}
-            {isBuild && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-amber-500/20 text-amber-300">
-                搭配
-              </span>
-            )}
-          </div>
-          <h3 className={`font-semibold truncate ${item.category === 'switches' ? 'text-[16px]' : 'text-[15px]'}`}>
+          {eyebrow ? (
+            <p className="text-[11px] font-medium text-text-tertiary tracking-wide truncate">{eyebrow}</p>
+          ) : null}
+          <h3 className="text-[15px] font-semibold font-display tracking-tight truncate text-text-primary mt-0.5">
             {item.name}
           </h3>
-          {isBuild && buildParts.length > 0 && (
+          {isBuild && buildParts.length > 0 ? (
             <p className="text-[11px] text-text-tertiary mt-1 truncate">{buildParts.join(' · ')}</p>
-          )}
-          <div className="flex items-center gap-3 mt-1.5">
-            {item.category === 'switches' && item.manufacturer ? (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-accent/15 text-accent">
-                {item.manufacturer}
-              </span>
-            ) : null}
-            {item.category === 'switches' && item.actuation ? (
-              <span className="text-[12px] font-semibold text-text-secondary">触发 {item.actuation}</span>
-            ) : null}
-            {item.rating ? (
-              <span className="flex items-center gap-1 text-[12px] text-amber-400">
-                <Star className="w-3 h-3 fill-current" />
-                {formatRating(item.rating)}
-              </span>
-            ) : null}
-            {item.price ? (
-              <span className="text-[12px] text-text-tertiary">¥{item.price}</span>
-            ) : null}
-            <span className="text-[11px] text-text-tertiary">{CATEGORY_LABELS[item.category]}</span>
-          </div>
+          ) : null}
         </div>
-        <div className="flex flex-wrap gap-1.5 max-w-[200px]">
-          {item.tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-text-tertiary">
-              {tag}
+
+        <div className="flex items-center gap-5 shrink-0">
+          {!isBuild ? <CardMetrics item={item} layout="list-trailing" /> : null}
+          {item.rating ? (
+            <span className="flex items-center gap-1 text-[12px] text-amber-400/90 tabular-nums">
+              <Star className="w-3.5 h-3.5 fill-current" />
+              {formatRating(item.rating)}
             </span>
-          ))}
+          ) : null}
+          {!isBuild ? (
+            <span
+              className={`text-[10px] px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${STATUS_BADGE_COLORS[item.status]}`}
+            >
+              {STATUS_LABELS[item.status]}
+            </span>
+          ) : (
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-medium bg-amber-500/15 text-amber-300">
+              搭配
+            </span>
+          )}
         </div>
       </button>
     )
@@ -95,91 +139,62 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
     <button
       onClick={onClick}
       className="
-        group relative flex flex-col rounded-2xl overflow-hidden
-        glass hover:bg-white/[0.08] hover:border-white/12
+        group relative flex flex-col rounded-[20px] overflow-hidden
+        bg-white/[0.03] border border-white/[0.06]
+        hover:bg-white/[0.05] hover:border-white/10
         transition-all duration-300 text-left
-        hover:shadow-2xl hover:shadow-black/20
+        hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.45)]
         hover:-translate-y-0.5
       "
     >
-      {/* Image */}
       <div className="relative aspect-[4/3] overflow-hidden bg-white/[0.04]">
         <img
           src={item.image}
           alt={item.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+          className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-700 ease-out"
           loading="lazy"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent" />
 
-        {/* Status badge */}
-        {!isBuild && (
-          <span className={`absolute top-3 left-3 z-10 text-[12px] px-3 py-1.5 rounded-xl font-semibold backdrop-blur-md shadow-lg ${STATUS_BADGE_COLORS[item.status]}`}>
+        {!isBuild ? (
+          <span
+            className={`absolute top-3 left-3 z-10 text-[11px] px-2.5 py-1 rounded-full font-medium backdrop-blur-xl ${STATUS_BADGE_COLORS[item.status]}`}
+          >
             {STATUS_LABELS[item.status]}
           </span>
-        )}
-        {isBuild && (
-          <span className="absolute top-3 left-3 z-10 text-[12px] px-3 py-1.5 rounded-xl font-semibold backdrop-blur-md shadow-lg bg-amber-500/90 text-white shadow-amber-500/30">
+        ) : (
+          <span className="absolute top-3 left-3 z-10 text-[11px] px-2.5 py-1 rounded-full font-medium backdrop-blur-xl bg-amber-500/80 text-white">
             搭配
           </span>
         )}
 
-        {/* Rating */}
         {item.rating ? (
-          <span className="absolute top-3 right-3 flex items-center gap-1 text-[11px] text-amber-300 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-lg">
+          <span className="absolute top-3 right-3 flex items-center gap-1 text-[11px] text-amber-200/95 bg-black/35 backdrop-blur-xl px-2 py-1 rounded-full tabular-nums">
             <Star className="w-3 h-3 fill-current" />
             {formatRating(item.rating)}
           </span>
         ) : null}
       </div>
 
-      {/* Content */}
-      <div className="p-5 space-y-2">
-        <div>
-          {!isBuild && <p className="text-[11px] text-text-tertiary font-medium">{item.brand}</p>}
-          <h3 className={`font-semibold mt-0.5 leading-snug ${item.category === 'switches' ? 'text-[17px]' : 'text-[15px]'}`}>
-            {item.name}
-          </h3>
-        </div>
+      <div className="p-4 pb-4.5">
+        {eyebrow ? (
+          <p className="text-[11px] font-medium text-text-tertiary tracking-wide truncate">{eyebrow}</p>
+        ) : null}
 
-        {isBuild && buildParts.length > 0 && (
-          <p className="text-[11px] text-text-tertiary leading-relaxed line-clamp-2">
+        <h3
+          className={`font-semibold font-display tracking-tight leading-snug text-text-primary ${
+            eyebrow ? 'mt-1' : ''
+          } ${item.category === 'switches' ? 'text-[16px]' : 'text-[15px]'} line-clamp-2`}
+        >
+          {item.name}
+        </h3>
+
+        {isBuild && buildParts.length > 0 ? (
+          <p className="text-[11px] text-text-tertiary leading-relaxed line-clamp-2 mt-2">
             {buildParts.join(' · ')}
           </p>
-        )}
-
-        {item.category === 'switches' && (item.manufacturer || item.actuation) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {item.manufacturer ? (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-accent/15 text-accent">
-                {item.manufacturer}
-              </span>
-            ) : null}
-            {item.actuation ? (
-              <span className="text-[12px] font-semibold text-text-secondary">
-                触发 {item.actuation}
-              </span>
-            ) : null}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between">
-          {item.price ? (
-            <span className="text-[13px] text-text-secondary font-medium">¥{item.price}</span>
-          ) : (
-            <span />
-          )}
-          <span className="text-[10px] text-text-tertiary">{CATEGORY_LABELS[item.category]}</span>
-        </div>
-
-        {item.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {item.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-text-tertiary">
-                {tag}
-              </span>
-            ))}
-          </div>
+        ) : (
+          <CardMetrics item={item} layout="grid" />
         )}
       </div>
     </button>
