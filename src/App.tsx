@@ -183,6 +183,11 @@ export default function App() {
           setStatus('wishlist')
           setSelectedItem(saved)
         }}
+        onSaveItem={async (item) => {
+          const saved = await vault.save(item)
+          setCategory(item.category)
+          setSelectedItem(saved)
+        }}
       />
 
       {selectedItem && !editing && (

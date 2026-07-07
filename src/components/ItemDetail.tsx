@@ -15,7 +15,7 @@ import {
 import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
 import { Dropdown } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
-import { StarRating } from './StarRating'
+import { StarRating, formatRating } from './StarRating'
 
 const STATUS_OPTIONS: DropdownOption[] = (Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({
   value: s,
@@ -114,7 +114,7 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
               {item.rating ? (
                 <div className="flex items-center gap-2">
                   <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                  <span className="text-[14px] font-medium">{item.rating}</span>
+                  <span className="text-[14px] font-medium">{formatRating(item.rating)}</span>
                   <span className="text-[12px] text-text-tertiary">评分</span>
                 </div>
               ) : null}
@@ -157,6 +157,12 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                 <div>
                   <span className="text-[14px]">{item.plate}</span>
                   <span className="text-[12px] text-text-tertiary ml-2">定位板</span>
+                </div>
+              ) : null}
+              {item.pcbThickness ? (
+                <div>
+                  <span className="text-[14px]">{item.pcbThickness}</span>
+                  <span className="text-[12px] text-text-tertiary ml-2">PCB厚度</span>
                 </div>
               ) : null}
               {item.filling ? (
@@ -299,9 +305,9 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                 </h3>
                 {item.ratingDetail.overall != null && (
                   <div className="flex items-center gap-2">
-                    <StarRating value={Math.round(item.ratingDetail.overall)} readonly size="sm" />
+                    <StarRating value={item.ratingDetail.overall} readonly size="sm" />
                     <span className="text-[15px] font-semibold text-amber-400 tabular-nums">
-                      {item.ratingDetail.overall}
+                      {formatRating(item.ratingDetail.overall)}
                     </span>
                   </div>
                 )}

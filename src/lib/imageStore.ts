@@ -2,6 +2,7 @@
 
 import { resolveBundledImageRef } from './collection'
 import { fetchImageBytes } from './fetchImage'
+import { basenameFromFilePath, itemDisplayBasename } from './naming'
 
 const DB_NAME = 'keyvault-images'
 const STORE = 'files'
@@ -29,8 +30,17 @@ function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {
   return { ext, bytes }
 }
 
-export function itemImageBasename(item: { filePath: string; id: string }): string {
-  return item.filePath.match(/\/([^/]+)\.md$/)?.[1] || item.id
+export function itemImageBasename(item: {
+  filePath: string
+  id: string
+  name?: string
+  brand?: string
+}): string {
+  return basenameFromFilePath(item.filePath) ?? itemDisplayBasename({
+    id: item.id,
+    name: item.name ?? item.id,
+    brand: item.brand ?? '',
+  })
 }
 
 async function idbPut(name: string, bytes: Uint8Array): Promise<void> {

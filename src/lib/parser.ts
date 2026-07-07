@@ -24,6 +24,7 @@ interface ItemFrontmatter {
     mount?: string
     plate?: string
     filling?: string
+    pcbThickness?: string
     weight?: string
     material?: string
     profile?: string
@@ -174,6 +175,7 @@ export function parseItemMarkdown(
     mount: specification.mount,
     plate: specification.plate,
     filling: specification.filling,
+    pcbThickness: specification.pcbThickness,
     weight: specification.weight ?? (category === 'keyboards' ? specification.material : undefined),
     material: category === 'keyboards' ? undefined : specification.material,
     profile: specification.profile,

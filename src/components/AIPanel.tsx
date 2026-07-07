@@ -16,8 +16,10 @@ import {
   Loader2,
   Key,
   Check,
+  ImagePlus,
 } from 'lucide-react'
 import type { CollectionItem, UserPreferences } from '../lib/types'
+import { CATEGORY_LABELS } from '../lib/types'
 import { buildCollectionContext } from '../lib/ai/context'
 import { chatCompletion, type ChatMessage } from '../lib/ai/deepseek'
 import {
@@ -27,6 +29,10 @@ import {
   parseSuggestedTags,
 } from '../lib/ai/prompts'
 import { getApiKey, setApiKey, isConfigured } from '../lib/ai/config'
+import { DEFAULT_VISION_MODEL, getVisionModel, setVisionModel } from '../lib/ai/visionConfig'
+import { prepareImageDataUrl } from '../lib/ai/vision'
+import { identifyGearFromImage } from '../lib/ai/identify'
+import { buildItemFromVision, formatVisionSummary } from '../lib/ai/imageItem'
 import {
   parseAddWishlistIntent,
   isWishlistImportMessage,
@@ -42,14 +48,17 @@ interface AIPanelProps {
   selectedItem?: CollectionItem | null
   onApplyTags?: (itemId: string, tags: string[]) => void
   onSaveWishlistItem?: (item: CollectionItem) => Promise<void>
+  onSaveItem?: (item: CollectionItem) => Promise<void>
 }
 
-type AIMode = 'chat' | 'summary' | 'recommend' | 'tag' | 'preferences'
+type AIMode = 'chat' | 'summary' | 'recommend' | 'tag' | 'preferences' | 'vision'
 
 interface UIMessage {
   role: 'user' | 'assistant'
   content: string
   suggestedTags?: string[]
+  imagePreview?: string
+  pendingItem?: CollectionItem
 }
 
 const MODES: { id: AIMode; label: string; icon: typeof MessageSquare; description: string }[] = [
@@ -58,6 +67,7 @@ const MODES: { id: AIMode; label: string; icon: typeof MessageSquare; descriptio
   { id: 'recommend', label: '推荐', icon: Lightbulb, description: '根据库存和偏好推荐键盘搭配方案' },
   { id: 'tag', label: '标签', icon: Tags, description: '根据描述自动推荐标签，可应用到收藏' },
   { id: 'preferences', label: '偏好', icon: Heart, description: '分析显式偏好与实际收藏行为的一致性' },
+  { id: 'vision', label: '识图', icon: ImagePlus, description: '上传图片，AI 识别套件/键帽/轴体并保存到收藏' },
 ]
 
 export function AIPanel({
@@ -69,6 +79,7 @@ export function AIPanel({
   selectedItem,
   onApplyTags,
   onSaveWishlistItem,
+  onSaveItem,
 }: AIPanelProps) {
   const [mode, setMode] = useState<AIMode>('chat')
   const [messages, setMessages] = useState<UIMessage[]>([])
@@ -77,7 +88,10 @@ export function AIPanel({
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [visionModelDraft, setVisionModelDraft] = useState('')
   const [configured, setConfigured] = useState(isConfigured)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef(messages)
   messagesRef.current = messages
@@ -91,6 +105,7 @@ export function AIPanel({
     if (open) {
       setConfigured(isConfigured())
       setApiKeyDraft(getApiKey())
+      setVisionModelDraft(getVisionModel())
     }
   }, [open])
 
@@ -132,6 +147,67 @@ export function AIPanel({
     },
     [configured, context, mode],
   )
+
+  const runVisionIdentify = useCallback(
+    async (file: File) => {
+      if (!configured) {
+        setShowSettings(true)
+        setError('请先配置 API Key')
+        return
+      }
+      if (!onSaveItem) return
+
+      setLoading(true)
+      setError(null)
+      try {
+        const dataUrl = await prepareImageDataUrl(file)
+        setImagePreview(dataUrl)
+        setMessages((prev) => [
+          ...prev,
+          { role: 'user', content: '上传了一张图片，请识别产品信息。', imagePreview: dataUrl },
+        ])
+
+        const result = await identifyGearFromImage(dataUrl)
+        const item = buildItemFromVision(result, dataUrl, items, 'collection')
+        const summary = formatVisionSummary(result, item)
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: summary, pendingItem: item },
+        ])
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setLoading(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    },
+    [configured, items, onSaveItem],
+  )
+
+  const handleVisionFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) void runVisionIdentify(file)
+  }
+
+  const saveVisionItem = async (item: CollectionItem) => {
+    if (!onSaveItem) return
+    setLoading(true)
+    setError(null)
+    try {
+      await onSaveItem(item)
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `已保存 **${item.name}** 到${CATEGORY_LABELS[item.category]}。`,
+        },
+      ])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const runWishlistImport = useCallback(
     async (text: string) => {
@@ -216,6 +292,7 @@ export function AIPanel({
 
   const saveApiKey = () => {
     setApiKey(apiKeyDraft)
+    setVisionModel(visionModelDraft)
     setConfigured(isConfigured())
     setShowSettings(false)
     setError(null)
@@ -226,6 +303,7 @@ export function AIPanel({
     setMessages([])
     setError(null)
     setInput('')
+    setImagePreview(null)
   }
 
   if (!open) return null
@@ -236,6 +314,7 @@ export function AIPanel({
     recommend: '获取推荐',
     tag: '生成标签',
     preferences: '分析偏好',
+    vision: '上传图片识图',
   }
 
   return (
@@ -286,6 +365,16 @@ export function AIPanel({
             placeholder="sk-..."
             className="w-full px-3 py-2 rounded-lg text-[12px] bg-white/[0.06] border border-white/[0.08] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
           />
+          <div className="text-[11px] text-text-secondary pt-1">识图模型（需支持视觉）</div>
+          <input
+            value={visionModelDraft}
+            onChange={(e) => setVisionModelDraft(e.target.value)}
+            placeholder={DEFAULT_VISION_MODEL}
+            className="w-full px-3 py-2 rounded-lg text-[12px] bg-white/[0.06] border border-white/[0.08] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
+          />
+          <p className="text-[10px] text-text-tertiary leading-relaxed">
+            标准 DeepSeek 对话模型不支持图片。识图请将 Base URL 设为 SiliconFlow（如 https://api.siliconflow.cn/v1）并填写 Qwen2-VL 等视觉模型名。
+          </p>
           <div className="flex items-center justify-between">
             <a
               href="https://platform.deepseek.com/api_keys"
@@ -348,7 +437,9 @@ export function AIPanel({
             <p className="text-[12px] text-text-tertiary max-w-[240px] leading-relaxed">
               {mode === 'chat'
                 ? '粘贴 zFrontier 帖子链接，例如：帮我把这个链接中的套件加入愿望单 https://www.zfrontier.com/app/flow/…'
-                : `点击下方「${quickActionLabel[mode]}」开始，或在输入框描述需求。`}
+                : mode === 'vision'
+                  ? '点击下方「选择图片识图」，上传套件/键帽/轴体照片。'
+                  : `点击下方「${quickActionLabel[mode]}」开始，或在输入框描述需求。`}
             </p>
           </div>
         )}
@@ -380,7 +471,26 @@ export function AIPanel({
                   </ReactMarkdown>
                 </div>
               ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                <>
+                  {msg.imagePreview && (
+                    <img
+                      src={msg.imagePreview}
+                      alt="上传图片"
+                      className="mb-2 max-h-32 rounded-lg border border-white/[0.08] object-cover"
+                    />
+                  )}
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                </>
+              )}
+
+              {msg.pendingItem && onSaveItem && (
+                <button
+                  onClick={() => saveVisionItem(msg.pendingItem!)}
+                  disabled={loading}
+                  className="mt-3 text-[11px] px-3 py-1.5 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-all disabled:opacity-40"
+                >
+                  保存到收藏
+                </button>
               )}
 
               {msg.suggestedTags && msg.suggestedTags.length > 0 && (
@@ -414,9 +524,11 @@ export function AIPanel({
           <div className="flex gap-2.5 items-center text-text-tertiary">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span className="text-[12px]">
-              {messages.at(-1)?.role === 'user' && isWishlistImportMessage(messages.at(-1)?.content ?? '')
-                ? '正在从 zFrontier 链接抓取信息…'
-                : 'DeepSeek 思考中…'}
+              {mode === 'vision' && loading
+                ? '正在识图…'
+                : messages.at(-1)?.role === 'user' && isWishlistImportMessage(messages.at(-1)?.content ?? '')
+                  ? '正在从 zFrontier 链接抓取信息…'
+                  : 'DeepSeek 思考中…'}
             </span>
           </div>
         )}
@@ -430,16 +542,36 @@ export function AIPanel({
 
       {/* Input */}
       <div className="p-4 border-t border-white/[0.06] space-y-2">
-        {quickActionLabel[mode] && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleVisionFile}
+        />
+
+        {mode === 'vision' ? (
           <button
-            onClick={handleQuickAction}
-            disabled={loading || (mode === 'tag' && !input.trim() && !selectedItem)}
-            className="w-full py-2 rounded-xl text-[12px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="w-full py-3 rounded-xl text-[12px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
           >
-            {quickActionLabel[mode]}
+            <ImagePlus className="w-4 h-4" />
+            选择图片识图
           </button>
+        ) : (
+          quickActionLabel[mode] && (
+            <button
+              onClick={handleQuickAction}
+              disabled={loading || (mode === 'tag' && !input.trim() && !selectedItem)}
+              className="w-full py-2 rounded-xl text-[12px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {quickActionLabel[mode]}
+            </button>
+          )
         )}
 
+        {mode !== 'vision' && (
         <div className="relative">
           <textarea
             value={input}
@@ -483,6 +615,11 @@ export function AIPanel({
             </button>
           )}
         </div>
+        )}
+
+        {mode === 'vision' && imagePreview && (
+          <img src={imagePreview} alt="预览" className="w-full max-h-24 object-cover rounded-lg border border-white/[0.08]" />
+        )}
 
         {!configured && (
           <p className="text-[10px] text-amber-400/80 text-center">

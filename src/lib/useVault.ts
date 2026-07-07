@@ -18,6 +18,7 @@ import {
   type VaultHandle,
 } from './fs'
 import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
+import { assignItemFilePath, collectTakenBasenames } from './naming'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -114,10 +115,14 @@ export function useVault(): VaultState {
         setBusy(true)
         setError(null)
         try {
-          await writeItem(handle, item)
+          const taken = collectTakenBasenames(
+            (await readVault(handle)).filter((i) => i.id !== item.id),
+          )
+          const toSave = assignItemFilePath(item, taken)
+          await writeItem(handle, toSave)
           const loaded = await readVault(handle)
           setItems(loaded)
-          return loaded.find((i) => i.id === item.id) ?? item
+          return loaded.find((i) => i.id === item.id) ?? toSave
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
           setError(message)
@@ -126,8 +131,12 @@ export function useVault(): VaultState {
           setBusy(false)
         }
       } else {
-        const withImage = await persistHeroToImageStore(item)
-        const saved = { ...item, ...withImage }
+        const taken = collectTakenBasenames(
+          getEffectiveItems().filter((i) => i.id !== item.id),
+        )
+        const withPath = assignItemFilePath(item, taken)
+        const withImage = await persistHeroToImageStore(withPath)
+        const saved = { ...withPath, ...withImage }
         upsertLocal(saved)
         setItems(getEffectiveItems())
         return getEffectiveItems().find((i) => i.id === item.id) ?? saved

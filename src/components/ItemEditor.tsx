@@ -13,12 +13,13 @@ import {
   PLATE_OPTIONS,
   FILLING_OPTIONS,
   WEIGHT_OPTIONS,
+  PCB_THICKNESS_OPTIONS,
 } from '../lib/types'
 import { BUILD_PARTS, getBuildPartName, setBuildPart, inventoryNames } from '../lib/builds'
 import { downloadMarkdown } from '../lib/serialize'
 import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
-import { StarRating } from './StarRating'
+import { StarRating, formatRating } from './StarRating'
 
 const CATEGORY_OPTIONS: DropdownOption[] = (Object.keys(CATEGORY_LABELS) as ItemCategory[]).map((c) => ({
   value: c,
@@ -163,8 +164,8 @@ function BuildSecondaryFields({
           {computedOverall != null && (
             <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
               <span className="text-[11px] text-text-tertiary shrink-0">总分</span>
-              <StarRating value={Math.round(computedOverall)} readonly size="sm" />
-              <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{computedOverall}</span>
+              <StarRating value={computedOverall} readonly size="sm" />
+              <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{formatRating(computedOverall)}</span>
             </div>
           )}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3">
@@ -545,6 +546,19 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                     </div>
                   )
                 }
+                if (field.key === 'pcbThickness') {
+                  return (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <ComboSelect
+                        value={(draft.pcbThickness as string) ?? ''}
+                        onChange={(v) => set('pcbThickness', v || undefined)}
+                        options={PCB_THICKNESS_OPTIONS}
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  )
+                }
                 if (field.key === 'weight') {
                   return (
                     <div key={field.key}>
@@ -647,8 +661,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
               {computedOverall != null && (
                 <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                   <span className="text-[11px] text-text-tertiary shrink-0">总分</span>
-                  <StarRating value={Math.round(computedOverall)} readonly size="sm" />
-                  <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{computedOverall}</span>
+                  <StarRating value={computedOverall} readonly size="sm" />
+                  <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{formatRating(computedOverall)}</span>
                   <span className="text-[10px] text-text-tertiary">自动加权</span>
                 </div>
               )}

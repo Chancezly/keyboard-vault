@@ -5,6 +5,7 @@ import {
   fetchFlowDetail,
   resetZfSession,
 } from './client'
+import { assignItemFilePath, collectTakenBasenames, itemDisplayBasename } from '../naming'
 import { fetchImageBytes } from '../fetchImage'
 import {
   extractKitName,
@@ -29,13 +30,6 @@ const ID_PREFIX: Record<ItemCategory, string> = {
   keycaps: 'kc',
   switches: 'sw',
   builds: 'bd',
-}
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 function nextItemId(items: CollectionItem[], category: ItemCategory): string {
@@ -130,7 +124,6 @@ export async function importFromZFrontierLink(
   }
 
   const id = nextItemId(existingItems, category)
-  const slug = slugify(name) || id
   const hero = await pickHeroImage(detail)
   const heroExt =
     hero?.match(/^data:image\/(\w+)/)?.[1]?.replace('jpeg', 'jpg') ??
@@ -141,7 +134,7 @@ export async function importFromZFrontierLink(
     throw new Error('该帖子没有可用主图，请换一条 zFrontier 帖子链接')
   }
 
-  const item: CollectionItem = {
+  const draft: CollectionItem = {
     id,
     name,
     brand,
@@ -166,9 +159,11 @@ export async function importFromZFrontierLink(
     price: priceInfo.price,
     currency: priceInfo.price != null ? priceInfo.currency : undefined,
     content: '',
-    filePath: `../../vault/${category}/${slug}.md`,
+    filePath: '',
     addedAt: new Date().toISOString().slice(0, 10),
   }
+
+  const item = assignItemFilePath(draft, collectTakenBasenames(existingItems))
 
   if (category === 'keyboards') {
     item.layout = extractLayoutFromName(name, text)
@@ -188,6 +183,6 @@ export async function importFromZFrontierLink(
     sourceUrl,
     matchedTitle: name,
     categoryLabel: CATEGORY_LABELS[category],
-    imageFileName: `${slug}.${heroExt}`,
+    imageFileName: `${itemDisplayBasename(item)}.${heroExt}`,
   }
 }

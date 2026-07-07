@@ -35,7 +35,7 @@ export function computeOverallRating(detail: Pick<RatingDetail, RatingDimension>
   const values = RATING_DIMENSIONS.map((d) => detail[d]).filter((v): v is number => v != null)
   if (values.length === 0) return undefined
   const avg = values.reduce((a, b) => a + b, 0) / values.length
-  return Math.round(avg * 10) / 10
+  return Math.round(avg * 2) / 2
 }
 
 /** 有维度评分时自动覆盖 overall，无维度时保留旧数据里的 overall */
@@ -79,6 +79,7 @@ export interface CollectionItem {
   mount?: string
   plate?: string
   filling?: string
+  pcbThickness?: string
   weight?: string
   material?: string
   profile?: string
@@ -205,6 +206,7 @@ export const RATING_DIMENSION_LABELS: Record<string, string> = {
   aesthetics: '外观',
 }
 
+export const PCB_THICKNESS_OPTIONS = ['1.2mm', '1.6mm']
 export const PLATE_OPTIONS = ['Fr4', '铝', 'PP', 'PC', '碳纤维', '铜']
 export const FILLING_OPTIONS = ['全棉', '无棉']
 export const WEIGHT_OPTIONS = ['无', '铝', '铜', '刀纹', 'PVD']
@@ -214,6 +216,7 @@ export type SpecFieldKey =
   | 'mount'
   | 'plate'
   | 'filling'
+  | 'pcbThickness'
   | 'weight'
   | 'material'
   | 'profile'
@@ -240,6 +243,7 @@ export const CATEGORY_SPEC_FIELDS: Record<ItemCategory, SpecFieldConfig[]> = {
     { key: 'layout', label: '配列', placeholder: '65%' },
     { key: 'weight', label: '配重', placeholder: '铝' },
     { key: 'plate', label: '定位板', placeholder: 'Fr4' },
+    { key: 'pcbThickness', label: 'PCB厚度', placeholder: '1.6mm' },
     { key: 'filling', label: '填充', placeholder: '全棉' },
   ],
   keycaps: [
@@ -264,6 +268,7 @@ export const SPEC_FIELD_LABELS: Record<SpecFieldKey, string> = {
   layout: '配列',
   mount: '结构',
   plate: '定位板',
+  pcbThickness: 'PCB厚度',
   filling: '填充',
   weight: '配重',
   material: '材质',

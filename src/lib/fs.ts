@@ -2,7 +2,7 @@ import JSZip from 'jszip'
 import { parseItemMarkdown } from './parser'
 import { serializeItem } from './serialize'
 import type { CollectionItem, ItemCategory, ItemRelation } from './types'
-import { itemImageBasename } from './imageStore'
+import { itemDisplayBasename, basenameFromFilePath } from './naming'
 import { fetchImageBytes } from './fetchImage'
 
 const CATEGORIES: ItemCategory[] = ['keyboards', 'keycaps', 'switches', 'builds']
@@ -243,7 +243,41 @@ export async function readVault(handle: VaultHandle): Promise<CollectionItem[]> 
   return items
 }
 
-// ---- Write ----
+async function removeStaleItemMd(
+  handle: VaultHandle,
+  item: CollectionItem,
+  keepFileName: string,
+): Promise<void> {
+  let dir: FileSystemDirectoryHandleLike
+  try {
+    dir = await handle.getDirectoryHandle(item.category)
+  } catch {
+    return
+  }
+  for await (const [name, entry] of dir.entries()) {
+    if (entry.kind !== 'file' || !name.endsWith('.md') || name === keepFileName) continue
+    const file = await (entry as FileSystemFileHandleLike).getFile()
+    const raw = await file.text()
+    const parsed = parseItemMarkdown(raw, item.category, `${item.category}/${name}`)
+    if (parsed.id === item.id) {
+      try {
+        await dir.removeEntry(name)
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+async function removeImageIfExists(handle: VaultHandle, fileName: string): Promise<void> {
+  if (!fileName) return
+  try {
+    const images = await handle.getDirectoryHandle('assets').then((a) => a.getDirectoryHandle('images'))
+    await images.removeEntry(fileName)
+  } catch {
+    // ignore
+  }
+}
 
 async function ensureDir(handle: VaultHandle, path: string[]): Promise<FileSystemDirectoryHandleLike> {
   let dir = handle
@@ -259,6 +293,10 @@ async function fetchRemoteImage(
   const fetched = await fetchImageBytes(ref)
   if (!fetched) return null
   return { ext: fetched.ext, bytes: fetched.bytes }
+}
+
+function itemImageBasename(item: CollectionItem): string {
+  return basenameFromFilePath(item.filePath) ?? itemDisplayBasename(item)
 }
 
 async function persistImages(handle: VaultHandle, item: CollectionItem): Promise<string[]> {
@@ -313,6 +351,13 @@ async function persistImages(handle: VaultHandle, item: CollectionItem): Promise
   return []
 }
 
+function heroFileNameFromRef(ref: string | undefined): string | null {
+  if (!ref) return null
+  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return null
+  const name = ref.split('/').pop() ?? ref
+  return /\.(png|jpe?g|webp|gif|avif)$/i.test(name) ? name : null
+}
+
 async function writeImageFile(handle: VaultHandle, fileName: string, bytes: Uint8Array): Promise<void> {
   const images = await ensureDir(handle, ['assets', 'images'])
   const fh = await images.getFileHandle(fileName, { create: true })
@@ -325,26 +370,64 @@ async function writeImageFile(handle: VaultHandle, fileName: string, bytes: Uint
 }
 
 export async function writeItem(handle: VaultHandle, item: CollectionItem): Promise<void> {
+  const mdBase = itemImageBasename(item)
+  const mdFileName = `${mdBase}.md`
+  const previousHero = heroFileNameFromRef(item.images[0])
+
+  await removeStaleItemMd(handle, item, mdFileName)
+
   const hadImage = !!item.images[0]
   const imageRefs = await persistImages(handle, item)
   if (hadImage && imageRefs.length === 0) {
     throw new Error('主图未能写入 vault/assets/images/，请重试')
   }
+
+  const newHero = imageRefs[0]
+  if (previousHero && newHero && previousHero !== newHero) {
+    await removeImageIfExists(handle, previousHero)
+  }
+
   const toSerialize: CollectionItem = { ...item, images: imageRefs, image: imageRefs[0] ?? '' }
   const dir = await ensureDir(handle, [item.category])
-  const fh = await dir.getFileHandle(`${item.id}.md`, { create: true })
+  const fh = await dir.getFileHandle(mdFileName, { create: true })
   const writable = await fh.createWritable()
   await writable.write(serializeItem(toSerialize))
   await writable.close()
 }
 
 export async function deleteItemFile(handle: VaultHandle, item: CollectionItem): Promise<void> {
+  let dir: FileSystemDirectoryHandleLike
   try {
-    const dir = await handle.getDirectoryHandle(item.category)
-    await dir.removeEntry(`${item.id}.md`)
+    dir = await handle.getDirectoryHandle(item.category)
   } catch {
-    // already gone
+    return
   }
+
+  const preferred = basenameFromFilePath(item.filePath)
+  if (preferred) {
+    try {
+      await dir.removeEntry(`${preferred}.md`)
+    } catch {
+      // fall through to id scan
+    }
+  }
+
+  for await (const [name, entry] of dir.entries()) {
+    if (entry.kind !== 'file' || !name.endsWith('.md')) continue
+    const file = await (entry as FileSystemFileHandleLike).getFile()
+    const raw = await file.text()
+    const parsed = parseItemMarkdown(raw, item.category, `${item.category}/${name}`)
+    if (parsed.id === item.id) {
+      try {
+        await dir.removeEntry(name)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const hero = heroFileNameFromRef(item.images[0] ?? item.image)
+  if (hero) await removeImageIfExists(handle, hero)
 }
 
 // ---- Backup / migration (ZIP) ----

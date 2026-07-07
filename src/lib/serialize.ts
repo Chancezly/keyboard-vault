@@ -1,6 +1,7 @@
 import { stringify } from 'yaml'
 import type { CollectionItem } from './types'
 import { normalizeRatingDetail } from './types'
+import { itemDisplayBasename } from './naming'
 
 function clean<T extends Record<string, unknown>>(obj: T): Partial<T> {
   const out: Record<string, unknown> = {}
@@ -27,6 +28,7 @@ export function serializeItem(item: CollectionItem): string {
     mount: item.mount,
     plate: item.plate,
     filling: item.filling,
+    pcbThickness: item.pcbThickness,
     weight: item.weight,
     material: item.material,
     profile: item.profile,
@@ -112,7 +114,7 @@ export function downloadMarkdown(item: CollectionItem) {
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  const slug = item.id || item.name.toLowerCase().replace(/\s+/g, '-')
+  const slug = itemDisplayBasename(item)
   a.href = url
   a.download = `${slug}.md`
   a.click()

@@ -1,4 +1,5 @@
 import { Star } from 'lucide-react'
+import { formatRating } from './StarRating'
 import type { CollectionItem } from '../lib/types'
 import { STATUS_LABELS, STATUS_BADGE_COLORS, CATEGORY_LABELS } from '../lib/types'
 import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
@@ -70,7 +71,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
             {item.rating ? (
               <span className="flex items-center gap-1 text-[12px] text-amber-400">
                 <Star className="w-3 h-3 fill-current" />
-                {item.rating}
+                {formatRating(item.rating)}
               </span>
             ) : null}
             {item.price ? (
@@ -127,7 +128,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
         {item.rating ? (
           <span className="absolute top-3 right-3 flex items-center gap-1 text-[11px] text-amber-300 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-lg">
             <Star className="w-3 h-3 fill-current" />
-            {item.rating}
+            {formatRating(item.rating)}
           </span>
         ) : null}
       </div>
