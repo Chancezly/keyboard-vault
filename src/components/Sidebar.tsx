@@ -63,7 +63,7 @@ export function Sidebar({
 }: SidebarProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
   return (
-    <aside className="flex flex-col w-[220px] shrink-0 h-full glass-strong rounded-2xl mx-3 my-3">
+    <aside className="hidden lg:flex flex-col w-[220px] shrink-0 h-full glass-strong rounded-2xl mx-3 my-3">
       {/* Logo */}
       <div className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-2.5">

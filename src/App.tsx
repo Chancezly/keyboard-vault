@@ -9,6 +9,8 @@ import { EmptyState } from './components/EmptyState'
 import { DataTableView } from './components/DataTableView'
 import { ReadOnlyBanner } from './components/ReadOnlyBanner'
 import { DisconnectDialog } from './components/DisconnectDialog'
+import { MobileTabBar } from './components/MobileTabBar'
+import { MobileMenuSheet } from './components/MobileMenuSheet'
 import { filterItems, sortItems, getStats, getAllTags, loadPreferences } from './lib/collection'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
@@ -41,6 +43,7 @@ export default function App() {
   const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const stats = useMemo(() => getStats(items), [items])
   const allTags = useMemo(() => getAllTags(items), [items])
@@ -120,7 +123,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-surface overflow-hidden">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-surface overflow-hidden">
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[20%] w-[600px] h-[600px] rounded-full bg-accent/[0.04] blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] rounded-full bg-purple-500/[0.03] blur-[100px]" />
@@ -142,110 +145,134 @@ export default function App() {
         onImportZip={vault.importZip}
       />
 
-      <main className="flex-1 flex flex-col min-w-0 relative">
-        <Header
-          search={search}
-          onSearchChange={setSearch}
-          status={status}
-          onStatusChange={setStatus}
-          sortBy={sortBy}
-          onSortChange={handleSortChange}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          resultCount={filtered.length}
-          title={title}
-          onNew={handleNew}
-          readOnly={readOnly}
-        />
-
-        {readOnly && (
-          <ReadOnlyBanner
-            vaultSupported={vault.supported}
-            onConnect={vault.connect}
-            busy={vault.busy}
-            error={vault.error}
+      <div className="flex flex-1 min-w-0 flex-col lg:flex-row overflow-hidden">
+        <main className="flex-1 flex flex-col min-w-0 relative pb-tab-bar">
+          <Header
+            search={search}
+            onSearchChange={setSearch}
+            status={status}
+            onStatusChange={setStatus}
+            sortBy={sortBy}
+            onSortChange={handleSortChange}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            resultCount={filtered.length}
+            title={title}
+            onNew={handleNew}
+            readOnly={readOnly}
           />
-        )}
 
-        {!readOnly && vault.error && (
-          <div className="mx-8 mt-4 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-[12px] text-red-300">
-            {vault.error}
-          </div>
-        )}
+          {readOnly && (
+            <ReadOnlyBanner
+              vaultSupported={vault.supported}
+              onConnect={vault.connect}
+              busy={vault.busy}
+              error={vault.error}
+            />
+          )}
 
-        <div className="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
-          {viewMode === 'table' ? (
-            category === 'all' ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
-                <p className="text-[15px] text-text-secondary">表格管理需要选定分类</p>
-                <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
-                  请在左侧选择「套件」「键帽」或「轴体」，即可横向浏览并批量编辑所有条目。
-                </p>
-              </div>
-            ) : category === 'builds' ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
-                <p className="text-[15px] text-text-secondary">搭配暂不支持表格编辑</p>
-                <p className="text-[13px] text-text-tertiary mt-2">请切换回卡片或列表视图，或选择其他分类。</p>
-              </div>
-            ) : readOnly ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
-                <p className="text-[15px] text-text-secondary">表格编辑需要连接本地文件夹</p>
-                <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
-                  连接后可横向浏览并批量修改规格、价格与购买时间。
-                </p>
-              </div>
-            ) : filtered.length === 0 ? (
-              <EmptyState search={search} />
-            ) : (
-              <DataTableView
-                items={filtered}
-                category={category}
-                busy={vault.busy}
-                onSave={vault.save}
-              />
-            )
-          ) : filtered.length === 0 ? (
-            <EmptyState search={search} />
-          ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-              {filtered.map((item) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  onClick={() => setSelectedItem(item)}
-                  viewMode="grid"
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 max-w-4xl">
-              {filtered.map((item) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  onClick={() => setSelectedItem(item)}
-                  viewMode="list"
-                />
-              ))}
+          {!readOnly && vault.error && (
+            <div className="mx-4 lg:mx-8 mt-3 lg:mt-4 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-[12px] text-red-300">
+              {vault.error}
             </div>
           )}
-        </div>
-      </main>
 
-      <AIPanel
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        items={items}
-        preferences={preferences}
-        allTags={allTags}
-        selectedItem={selectedItem}
-        readOnly={readOnly}
-        onApplyTags={readOnly ? undefined : handleApplyTags}
-        onSaveItem={readOnly ? undefined : async (item) => {
-          const saved = await vault.save(item)
-          setCategory(item.category)
-          setSelectedItem(saved)
-        }}
+          <div className="flex-1 overflow-y-auto px-4 lg:px-8 pb-4 lg:pb-8 min-h-0 overscroll-y-contain">
+            {viewMode === 'table' ? (
+              category === 'all' ? (
+                <div className="flex flex-col items-center justify-center py-16 lg:py-24 text-center max-w-md mx-auto px-2">
+                  <p className="text-[15px] text-text-secondary">表格管理需要选定分类</p>
+                  <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
+                    请在底部或左侧选择「套件」「键帽」或「轴体」，即可横向浏览并批量编辑所有条目。
+                  </p>
+                </div>
+              ) : category === 'builds' ? (
+                <div className="flex flex-col items-center justify-center py-16 lg:py-24 text-center max-w-md mx-auto px-2">
+                  <p className="text-[15px] text-text-secondary">搭配暂不支持表格编辑</p>
+                  <p className="text-[13px] text-text-tertiary mt-2">请切换回卡片或列表视图，或选择其他分类。</p>
+                </div>
+              ) : readOnly ? (
+                <div className="flex flex-col items-center justify-center py-16 lg:py-24 text-center max-w-md mx-auto px-2">
+                  <p className="text-[15px] text-text-secondary">表格编辑需要连接本地文件夹</p>
+                  <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
+                    连接后可横向浏览并批量修改规格、价格与购买时间。
+                  </p>
+                </div>
+              ) : filtered.length === 0 ? (
+                <EmptyState search={search} />
+              ) : (
+                <DataTableView
+                  items={filtered}
+                  category={category}
+                  busy={vault.busy}
+                  onSave={vault.save}
+                />
+              )
+            ) : filtered.length === 0 ? (
+              <EmptyState search={search} />
+            ) : viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-6">
+                {filtered.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => setSelectedItem(item)}
+                    viewMode="grid"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 max-w-4xl">
+                {filtered.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => setSelectedItem(item)}
+                    viewMode="list"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </main>
+
+        <AIPanel
+          open={aiOpen}
+          onClose={() => setAiOpen(false)}
+          items={items}
+          preferences={preferences}
+          allTags={allTags}
+          selectedItem={selectedItem}
+          readOnly={readOnly}
+          onApplyTags={readOnly ? undefined : handleApplyTags}
+          onSaveItem={readOnly ? undefined : async (item) => {
+            const saved = await vault.save(item)
+            setCategory(item.category)
+            setSelectedItem(saved)
+          }}
+        />
+      </div>
+
+      <MobileTabBar
+        activeCategory={category}
+        onCategoryChange={setCategory}
+        onOpenMenu={() => setMobileMenuOpen(true)}
+      />
+
+      <MobileMenuSheet
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        stats={stats}
+        vaultSupported={vault.supported}
+        vaultWritable={vaultWritable}
+        vaultDirName={vault.dirName}
+        vaultBusy={vault.busy}
+        aiOpen={aiOpen}
+        onOpenAI={() => setAiOpen(true)}
+        onConnectVault={vault.connect}
+        onRequestDisconnect={() => setDisconnectOpen(true)}
+        onExportZip={vault.exportZip}
+        onImportZip={vault.importZip}
       />
 
       {selectedItem && !editing && (

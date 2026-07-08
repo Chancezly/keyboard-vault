@@ -63,10 +63,10 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
   const stateFields = getStateFields(item)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
+    <div className="fixed inset-0 z-50 flex flex-col lg:items-center lg:justify-center lg:p-8">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden glass-strong rounded-3xl shadow-2xl shadow-black/40 flex flex-col">
+      <div className="relative w-full h-full lg:h-auto lg:max-w-4xl lg:max-h-[90vh] overflow-hidden glass-strong lg:rounded-3xl shadow-2xl shadow-black/40 flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:pt-0 lg:pb-0">
         <div className="absolute top-5 right-5 z-10 flex items-center gap-2">
           {!readOnly && onEdit && (
             <button
@@ -85,7 +85,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
         </div>
 
         <div className="overflow-y-auto">
-          <div className="relative h-72 overflow-hidden">
+          <div className="relative h-48 sm:h-72 overflow-hidden">
             <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#141416] via-[#141416]/40 to-transparent" />
 

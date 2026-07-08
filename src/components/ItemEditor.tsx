@@ -315,10 +315,10 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[60] flex flex-col lg:items-center lg:justify-center lg:p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] glass-strong rounded-3xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden">
+      <div className="relative w-full h-full lg:h-auto lg:max-w-2xl lg:max-h-[90vh] glass-strong lg:rounded-3xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:pt-0 lg:pb-0">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
           <h2 className="text-[15px] font-semibold">{isNew ? '新增收藏' : '编辑收藏'}</h2>

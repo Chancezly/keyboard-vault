@@ -270,7 +270,13 @@ export function AIPanel({
   }
 
   return (
-    <div className="flex flex-col w-[400px] shrink-0 h-full glass-strong rounded-2xl mr-3 my-3 overflow-hidden">
+    <div className="
+      fixed inset-0 z-[45] flex flex-col
+      bg-[#0c0c0e] lg:static lg:z-auto lg:inset-auto
+      lg:w-[400px] lg:shrink-0 lg:h-full glass-strong
+      lg:rounded-2xl lg:mr-3 lg:my-3 overflow-hidden
+      pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:pt-0 lg:pb-0
+    ">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <div className="flex items-center gap-2.5">

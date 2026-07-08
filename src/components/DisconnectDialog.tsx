@@ -8,9 +8,9 @@ interface DisconnectDialogProps {
 
 export function DisconnectDialog({ dirName, onConfirm, onCancel }: DisconnectDialogProps) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-md glass-strong rounded-2xl p-6 shadow-2xl shadow-black/40">
+      <div className="relative w-full sm:max-w-md glass-strong rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl shadow-black/40 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h3 className="text-[17px] font-semibold font-display tracking-tight">断开本地连接？</h3>

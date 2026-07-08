@@ -30,6 +30,7 @@
     @apply bg-surface text-text-primary font-sans overflow-hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
   }
 
   ::selection {
@@ -69,5 +70,15 @@
 
   .font-display {
     font-family: var(--font-display);
+  }
+
+  .pb-tab-bar {
+    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (min-width: 1024px) {
+    .pb-tab-bar {
+      padding-bottom: 0;
+    }
   }
 }

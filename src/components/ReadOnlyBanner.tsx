@@ -12,8 +12,8 @@ export function ReadOnlyBanner({ vaultSupported, onConnect, busy, error }: ReadO
   const browserHint = vaultBrowserHint()
 
   return (
-    <div className="mx-8 mt-4 mb-0 space-y-2">
-      <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-amber-500/[0.08] border border-amber-500/20">
+    <div className="mx-4 lg:mx-8 mt-3 lg:mt-4 mb-0 space-y-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 rounded-xl bg-amber-500/[0.08] border border-amber-500/20">
         <div className="flex items-start gap-3 min-w-0">
           <FolderSync className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
@@ -29,7 +29,7 @@ export function ReadOnlyBanner({ vaultSupported, onConnect, busy, error }: ReadO
             type="button"
             onClick={onConnect}
             disabled={busy}
-            className="shrink-0 px-3.5 py-2 rounded-xl text-[12px] font-medium bg-amber-500/90 text-white hover:bg-amber-500 transition-all disabled:opacity-40"
+            className="shrink-0 w-full sm:w-auto px-3.5 py-2.5 sm:py-2 rounded-xl text-[12px] font-medium bg-amber-500/90 text-white hover:bg-amber-500 transition-all disabled:opacity-40 min-h-[44px] sm:min-h-0"
           >
             连接文件夹
           </button>
