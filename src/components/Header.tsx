@@ -26,6 +26,7 @@ interface HeaderProps {
   resultCount: number
   title: string
   onNew: () => void
+  readOnly?: boolean
 }
 
 export function Header({
@@ -40,6 +41,7 @@ export function Header({
   resultCount,
   title,
   onNew,
+  readOnly = false,
 }: HeaderProps) {
   return (
     <header className="flex items-center justify-between gap-6 px-8 pt-8 pb-4">
@@ -109,7 +111,9 @@ export function Header({
         {/* New item */}
         <button
           onClick={onNew}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-accent/90 text-white hover:bg-accent transition-all"
+          disabled={readOnly}
+          title={readOnly ? '连接本地文件夹后可新增收藏' : '新增收藏'}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-accent/90 text-white hover:bg-accent transition-all disabled:opacity-40 disabled:pointer-events-none"
         >
           <Plus className="w-4 h-4" />
           新增

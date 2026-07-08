@@ -45,6 +45,12 @@ function resolveItemImages(item: CollectionItem): CollectionItem {
   return { ...item, images: [resolved], image: resolved }
 }
 
+/** 只读演示：内置 vault 示例，不合并 localStorage */
+export function getBundledItems(): CollectionItem[] {
+  return resolveRelations(loadCollection().map(resolveItemImages))
+}
+
+/** @deprecated v1 只读演示请用 getBundledItems；保留供旧逻辑兼容 */
 export function getEffectiveItems(): CollectionItem[] {
   const overrides = read<Record<string, CollectionItem>>(LS_OVERRIDES, {})
   const custom = read<CollectionItem[]>(LS_CUSTOM, [])

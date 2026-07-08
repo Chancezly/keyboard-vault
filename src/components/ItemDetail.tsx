@@ -1,4 +1,4 @@
-import { X, Star, Calendar, Tag, ExternalLink, Link2, History, MapPin, Pencil } from 'lucide-react'
+import { X, Star, Tag, ExternalLink, Link2, History, Pencil } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { CollectionItem, ItemStatus } from '../lib/types'
@@ -13,6 +13,13 @@ import {
   SOUND_TENDENCY_LABELS,
 } from '../lib/types'
 import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
+import {
+  getExtraSpecFields,
+  getSpecificationFields,
+  getStateFields,
+  specSectionTitle,
+  stateSectionTitle,
+} from '../lib/itemDisplay'
 import { Dropdown } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
 import { StarRating, formatRating } from './StarRating'
@@ -24,36 +31,51 @@ const STATUS_OPTIONS: DropdownOption[] = (Object.keys(STATUS_LABELS) as ItemStat
 
 interface ItemDetailProps {
   item: CollectionItem
+  readOnly?: boolean
   onClose: () => void
-  onEdit: () => void
-  onStatusChange: (next: ItemStatus) => void
+  onEdit?: () => void
+  onStatusChange?: (next: ItemStatus) => void
 }
 
-export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetailProps) {
+function DetailFieldGrid({ fields }: { fields: { label: string; value: string }[] }) {
+  if (!fields.length) return null
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+      {fields.map((f) => (
+        <div key={f.label}>
+          <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-tertiary">{f.label}</p>
+          <p
+            className={`text-[14px] mt-1 leading-snug ${
+              f.value === '—' ? 'text-text-tertiary' : 'text-text-primary'
+            }`}
+          >
+            {f.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusChange }: ItemDetailProps) {
   const isBuild = item.category === 'builds'
+  const specFields = [...getSpecificationFields(item), ...getExtraSpecFields(item)]
+  const stateFields = getStateFields(item)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
-      <div className="
-        relative w-full max-w-4xl max-h-[90vh] overflow-hidden
-        glass-strong rounded-3xl shadow-2xl shadow-black/40
-        flex flex-col
-      ">
-        {/* Top actions */}
+      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden glass-strong rounded-3xl shadow-2xl shadow-black/40 flex flex-col">
         <div className="absolute top-5 right-5 z-10 flex items-center gap-2">
-          <button
-            onClick={onEdit}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md text-white/80 hover:text-white hover:bg-black/60 transition-all text-[12px] font-medium"
-          >
-            <Pencil className="w-3.5 h-3.5" /> 编辑
-          </button>
+          {!readOnly && onEdit && (
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md text-white/80 hover:text-white hover:bg-black/60 transition-all text-[12px] font-medium"
+            >
+              <Pencil className="w-3.5 h-3.5" /> 编辑
+            </button>
+          )}
           <button
             onClick={onClose}
             className="p-2 rounded-xl bg-black/40 backdrop-blur-md text-white/70 hover:text-white hover:bg-black/60 transition-all"
@@ -63,27 +85,32 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
         </div>
 
         <div className="overflow-y-auto">
-          {/* Hero image */}
           <div className="relative h-72 overflow-hidden">
-            <img
-              src={item.image}
-              alt={item.name}
-              className="w-full h-full object-cover"
-            />
+            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#141416] via-[#141416]/40 to-transparent" />
 
             <div className="absolute bottom-0 left-0 right-0 p-8">
               <div className="flex items-center gap-2 mb-2">
-                {!isBuild && (
-                  <Dropdown
-                    value={item.status}
-                    onChange={(v) => onStatusChange(v as ItemStatus)}
-                    options={STATUS_OPTIONS}
-                    fullWidth={false}
-                    buttonClassName={`flex items-center gap-1.5 text-[11px] pl-2.5 pr-2 py-1 rounded-lg font-medium cursor-pointer transition-all ${STATUS_COLORS[item.status]}`}
-                  />
-                )}
+                {!isBuild &&
+                  (readOnly || !onStatusChange ? (
+                    <span
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium ${STATUS_COLORS[item.status]}`}
+                    >
+                      {STATUS_LABELS[item.status]}
+                    </span>
+                  ) : (
+                    <Dropdown
+                      value={item.status}
+                      onChange={(v) => onStatusChange(v as ItemStatus)}
+                      options={STATUS_OPTIONS}
+                      fullWidth={false}
+                      buttonClassName={`flex items-center gap-1.5 text-[11px] pl-2.5 pr-2 py-1 rounded-lg font-medium cursor-pointer transition-all ${STATUS_COLORS[item.status]}`}
+                    />
+                  ))}
                 <span className="text-[11px] text-text-tertiary">{CATEGORY_LABELS[item.category]}</span>
+                {readOnly && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-white/10 text-white/70">只读</span>
+                )}
               </div>
               {!isBuild && item.brand ? (
                 <p className="text-[13px] text-text-secondary font-medium">{item.brand}</p>
@@ -108,151 +135,32 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
             </div>
           </div>
 
-          {/* Meta info */}
-          <div className="px-8 py-6 border-b border-white/[0.06]">
-            <div className="flex flex-wrap gap-6">
-              {item.rating ? (
-                <div className="flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                  <span className="text-[14px] font-medium">{formatRating(item.rating)}</span>
-                  <span className="text-[12px] text-text-tertiary">评分</span>
-                </div>
-              ) : null}
-              {item.price ? (
-                <div>
-                  <span className="text-[14px] font-medium">¥{item.price}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">
-                    {item.status === 'sold' ? '购入价' : '价格'}
-                  </span>
-                </div>
-              ) : null}
-              {item.status === 'sold' && item.soldPrice != null ? (
-                <div>
-                  <span className="text-[14px] font-medium">¥{item.soldPrice}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">售出价</span>
-                </div>
-              ) : null}
-              {item.acquired ? (
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-text-tertiary" />
-                  <span className="text-[14px]">{item.acquired}</span>
-                  <span className="text-[12px] text-text-tertiary">
-                    {item.category === 'keyboards' ? '购买时间' : '购入'}
-                  </span>
-                </div>
-              ) : null}
-              {item.layout ? (
-                <div>
-                  <span className="text-[14px]">{item.layout}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">配列</span>
-                </div>
-              ) : null}
-              {item.weight ? (
-                <div>
-                  <span className="text-[14px]">{item.weight}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">配重</span>
-                </div>
-              ) : null}
-              {item.plate ? (
-                <div>
-                  <span className="text-[14px]">{item.plate}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">定位板</span>
-                </div>
-              ) : null}
-              {item.pcbThickness ? (
-                <div>
-                  <span className="text-[14px]">{item.pcbThickness}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">PCB厚度</span>
-                </div>
-              ) : null}
-              {item.filling ? (
-                <div>
-                  <span className="text-[14px]">{item.filling}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">填充</span>
-                </div>
-              ) : null}
-              {item.mount && item.category !== 'keyboards' ? (
-                <div>
-                  <span className="text-[14px]">{item.mount}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">结构</span>
-                </div>
-              ) : null}
-              {item.profile ? (
-                <div>
-                  <span className="text-[14px]">{item.profile}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">高度</span>
-                </div>
-              ) : null}
-              {item.switchType ? (
-                <div>
-                  <span className="text-[14px]">{item.switchType}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">类型</span>
-                </div>
-              ) : null}
-              {item.manufacturer ? (
-                <div>
-                  <span className="text-[14px]">{item.manufacturer}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">代工厂</span>
-                </div>
-              ) : null}
-              {item.actuation ? (
-                <div>
-                  <span className="text-[14px]">{item.actuation}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">触发压力</span>
-                </div>
-              ) : null}
-              {item.bottomOut ? (
-                <div>
-                  <span className="text-[14px]">{item.bottomOut}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">触底压力</span>
-                </div>
-              ) : null}
-              {item.preTravel ? (
-                <div>
-                  <span className="text-[14px]">{item.preTravel}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">触发行程</span>
-                </div>
-              ) : null}
-              {item.bottomTravel ? (
-                <div>
-                  <span className="text-[14px]">{item.bottomTravel}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">触底行程</span>
-                </div>
-              ) : null}
-              {item.spring ? (
-                <div>
-                  <span className="text-[14px]">{item.spring}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">弹簧</span>
-                </div>
-              ) : null}
-              {item.lube ? (
-                <div>
-                  <span className="text-[14px]">{item.lube}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">润滑</span>
-                </div>
-              ) : null}
-              {item.color ? (
-                <div>
-                  <span className="text-[14px]">{item.color}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">颜色</span>
-                </div>
-              ) : null}
-              {item.condition ? (
-                <div>
-                  <span className="text-[14px]">{item.condition}</span>
-                  <span className="text-[12px] text-text-tertiary ml-2">状态</span>
-                </div>
-              ) : null}
-              {item.location ? (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-text-tertiary" />
-                  <span className="text-[14px]">{item.location}</span>
-                </div>
-              ) : null}
+          {specFields.length > 0 && (
+            <div className="px-8 py-6 border-b border-white/[0.06]">
+              <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary mb-4">
+                {specSectionTitle(item.category)}
+              </h3>
+              <DetailFieldGrid fields={specFields} />
             </div>
+          )}
 
-            {item.tagGroups.length > 0 && (
-              <div className="mt-4 space-y-2">
+          <div className="px-8 py-6 border-b border-white/[0.06]">
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary mb-4">
+              {stateSectionTitle(item.category)}
+            </h3>
+            <DetailFieldGrid fields={stateFields} />
+            {item.rating ? (
+              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/[0.06]">
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span className="text-[14px] font-medium">{formatRating(item.rating)}</span>
+                <span className="text-[12px] text-text-tertiary">总评分</span>
+              </div>
+            ) : null}
+          </div>
+
+          {item.tagGroups.length > 0 && (
+            <div className="px-8 py-6 border-b border-white/[0.06]">
+              <div className="space-y-2">
                 {item.tagGroups.map((tg) => (
                   <div key={tg.group || 'tags'} className="flex items-center gap-2 flex-wrap">
                     {tg.group ? (
@@ -264,17 +172,19 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                       <Tag className="w-3.5 h-3.5 text-text-tertiary" />
                     )}
                     {tg.values.map((tag) => (
-                      <span key={tag} className="text-[11px] px-2.5 py-1 rounded-full bg-white/[0.06] text-text-secondary">
+                      <span
+                        key={tag}
+                        className="text-[11px] px-2.5 py-1 rounded-full bg-white/[0.06] text-text-secondary"
+                      >
                         {tag}
                       </span>
                     ))}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Relations */}
           {item.relations.length > 0 && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary mb-4">
@@ -295,13 +205,12 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
             </div>
           )}
 
-          {/* Rating breakdown */}
           {item.ratingDetail && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary">
                   <Star className="w-3.5 h-3.5" />
-                  评分
+                  评分细节
                 </h3>
                 {item.ratingDetail.overall != null && (
                   <div className="flex items-center gap-2">
@@ -329,7 +238,6 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
             </div>
           )}
 
-          {/* Sound tendency (switches) */}
           {item.soundTendency != null && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <div className="flex items-center justify-between mb-3">
@@ -362,7 +270,6 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
             </div>
           )}
 
-          {/* History timeline */}
           {item.history.length > 0 && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary mb-4">
@@ -374,7 +281,9 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
                   <div key={i} className="flex gap-3">
                     <div className="flex flex-col items-center pt-1">
                       <div className="w-2 h-2 rounded-full bg-accent/70" />
-                      {i < item.history.length - 1 && <div className="w-px flex-1 bg-white/[0.08] mt-1" />}
+                      {i < item.history.length - 1 && (
+                        <div className="w-px flex-1 bg-white/[0.08] mt-1" />
+                      )}
                     </div>
                     <div className="pb-1">
                       <div className="flex items-center gap-2">
@@ -394,22 +303,14 @@ export function ItemDetail({ item, onClose, onEdit, onStatusChange }: ItemDetail
             </div>
           )}
 
-          {/* Markdown content */}
-          <div className="px-8 py-8 prose prose-invert prose-sm max-w-none
-            prose-headings:font-display prose-headings:tracking-tight prose-headings:text-text-primary
-            prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4
-            prose-p:text-text-secondary prose-p:leading-relaxed
-            prose-li:text-text-secondary
-            prose-strong:text-text-primary
-            prose-table:text-text-secondary
-            prose-th:text-text-primary prose-th:font-medium
-            prose-td:border-white/10 prose-th:border-white/10
-            prose-blockquote:border-accent/40 prose-blockquote:text-text-secondary prose-blockquote:not-italic
-          ">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+          <div className="px-8 py-8 prose prose-invert prose-sm max-w-none prose-headings:font-display prose-headings:tracking-tight prose-headings:text-text-primary prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-text-secondary prose-p:leading-relaxed prose-li:text-text-secondary prose-strong:text-text-primary prose-table:text-text-secondary prose-th:text-text-primary prose-th:font-medium prose-td:border-white/10 prose-th:border-white/10 prose-blockquote:border-accent/40 prose-blockquote:text-text-secondary prose-blockquote:not-italic">
+            {item.content.trim() ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+            ) : (
+              <p className="text-text-tertiary not-prose text-[13px]">暂无体验描述</p>
+            )}
           </div>
 
-          {/* File path */}
           <div className="px-8 pb-8">
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/[0.03] text-[11px] text-text-tertiary">
               <ExternalLink className="w-3 h-3" />

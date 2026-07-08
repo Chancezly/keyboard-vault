@@ -287,6 +287,22 @@ async function ensureDir(handle: VaultHandle, path: string[]): Promise<FileSyste
   return dir
 }
 
+/** 空文件夹连接后自动创建标准 vault 目录结构 */
+export async function ensureVaultStructure(handle: VaultHandle): Promise<void> {
+  const paths = [
+    ['keyboards'],
+    ['keycaps'],
+    ['switches'],
+    ['builds'],
+    ['assets', 'images'],
+    ['settings'],
+    ['ai', 'cache'],
+  ]
+  for (const path of paths) {
+    await ensureDir(handle, path)
+  }
+}
+
 async function fetchRemoteImage(
   ref: string,
 ): Promise<{ ext: string; bytes: Uint8Array } | null> {

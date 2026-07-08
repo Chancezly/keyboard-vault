@@ -7,6 +7,8 @@ import { ItemEditor } from './components/ItemEditor'
 import { AIPanel } from './components/AIPanel'
 import { EmptyState } from './components/EmptyState'
 import { DataTableView } from './components/DataTableView'
+import { ReadOnlyBanner } from './components/ReadOnlyBanner'
+import { DisconnectDialog } from './components/DisconnectDialog'
 import { filterItems, sortItems, getStats, getAllTags, loadPreferences } from './lib/collection'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
@@ -27,7 +29,9 @@ function loadSortPreference(): SortOption {
 
 export default function App() {
   const vault = useVault()
-  const { items } = vault
+  const { items, writable: vaultWritable } = vault
+  const readOnly = !vaultWritable
+
   const [category, setCategory] = useState<ItemCategory | 'all'>('all')
   const [status, setStatus] = useState<ItemStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -36,6 +40,7 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
   const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
 
   const stats = useMemo(() => getStats(items), [items])
   const allTags = useMemo(() => getAllTags(items), [items])
@@ -70,12 +75,14 @@ export default function App() {
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
 
   const handleSave = async (item: CollectionItem) => {
+    if (readOnly) return
     await vault.save(item)
     setEditing(null)
     setSelectedItem(item)
   }
 
   const handleDelete = async (id: string) => {
+    if (readOnly) return
     const target = items.find((i) => i.id === id)
     if (target) await vault.remove(target)
     setEditing(null)
@@ -83,17 +90,20 @@ export default function App() {
   }
 
   const handleStatusChange = async (item: CollectionItem, next: ItemStatus) => {
+    if (readOnly) return
     const updated = { ...item, status: next }
     await vault.save(updated)
     setSelectedItem(updated)
   }
 
   const handleNew = () => {
+    if (readOnly) return
     const cat: ItemCategory = category === 'all' ? 'keyboards' : category
     setEditing({ item: createBlankItem(cat), isNew: true })
   }
 
   const handleApplyTags = async (itemId: string, tags: string[]) => {
+    if (readOnly) return
     const item = items.find((i) => i.id === itemId)
     if (!item) return
     const merged = Array.from(new Set([...item.tags, ...tags]))
@@ -102,9 +112,15 @@ export default function App() {
     if (selectedItem?.id === itemId) setSelectedItem(updated)
   }
 
+  const handleDisconnectConfirm = async () => {
+    setDisconnectOpen(false)
+    setEditing(null)
+    setSelectedItem(null)
+    await vault.disconnect()
+  }
+
   return (
     <div className="flex h-screen bg-surface overflow-hidden">
-      {/* Ambient background */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[20%] w-[600px] h-[600px] rounded-full bg-accent/[0.04] blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] rounded-full bg-purple-500/[0.03] blur-[100px]" />
@@ -116,12 +132,12 @@ export default function App() {
         onOpenAI={() => setAiOpen(!aiOpen)}
         aiOpen={aiOpen}
         stats={stats}
-        vaultMode={vault.mode}
         vaultSupported={vault.supported}
+        vaultWritable={vaultWritable}
         vaultDirName={vault.dirName}
         vaultBusy={vault.busy}
         onConnectVault={vault.connect}
-        onDisconnectVault={vault.disconnect}
+        onRequestDisconnect={() => setDisconnectOpen(true)}
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
       />
@@ -139,7 +155,23 @@ export default function App() {
           resultCount={filtered.length}
           title={title}
           onNew={handleNew}
+          readOnly={readOnly}
         />
+
+        {readOnly && (
+          <ReadOnlyBanner
+            vaultSupported={vault.supported}
+            onConnect={vault.connect}
+            busy={vault.busy}
+            error={vault.error}
+          />
+        )}
+
+        {!readOnly && vault.error && (
+          <div className="mx-8 mt-4 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-[12px] text-red-300">
+            {vault.error}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
           {viewMode === 'table' ? (
@@ -154,6 +186,13 @@ export default function App() {
               <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
                 <p className="text-[15px] text-text-secondary">搭配暂不支持表格编辑</p>
                 <p className="text-[13px] text-text-tertiary mt-2">请切换回卡片或列表视图，或选择其他分类。</p>
+              </div>
+            ) : readOnly ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
+                <p className="text-[15px] text-text-secondary">表格编辑需要连接本地文件夹</p>
+                <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
+                  连接后可横向浏览并批量修改规格、价格与购买时间。
+                </p>
               </div>
             ) : filtered.length === 0 ? (
               <EmptyState search={search} />
@@ -200,14 +239,9 @@ export default function App() {
         preferences={preferences}
         allTags={allTags}
         selectedItem={selectedItem}
-        onApplyTags={handleApplyTags}
-        onSaveWishlistItem={async (item) => {
-          const saved = await vault.save(item)
-          setCategory(item.category)
-          setStatus('wishlist')
-          setSelectedItem(saved)
-        }}
-        onSaveItem={async (item) => {
+        readOnly={readOnly}
+        onApplyTags={readOnly ? undefined : handleApplyTags}
+        onSaveItem={readOnly ? undefined : async (item) => {
           const saved = await vault.save(item)
           setCategory(item.category)
           setSelectedItem(saved)
@@ -217,13 +251,14 @@ export default function App() {
       {selectedItem && !editing && (
         <ItemDetail
           item={selectedItem}
+          readOnly={readOnly}
           onClose={() => setSelectedItem(null)}
-          onEdit={() => setEditing({ item: selectedItem, isNew: false })}
-          onStatusChange={(next) => handleStatusChange(selectedItem, next)}
+          onEdit={readOnly ? undefined : () => setEditing({ item: selectedItem, isNew: false })}
+          onStatusChange={readOnly ? undefined : (next) => handleStatusChange(selectedItem, next)}
         />
       )}
 
-      {editing && (
+      {editing && !readOnly && (
         <ItemEditor
           item={editing.item}
           isNew={editing.isNew}
@@ -233,6 +268,14 @@ export default function App() {
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {disconnectOpen && vault.dirName && (
+        <DisconnectDialog
+          dirName={vault.dirName}
+          onConfirm={() => void handleDisconnectConfirm()}
+          onCancel={() => setDisconnectOpen(false)}
         />
       )}
     </div>

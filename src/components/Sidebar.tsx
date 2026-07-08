@@ -28,12 +28,12 @@ interface SidebarProps {
     sold: number
     byCategory: Record<ItemCategory, number>
   }
-  vaultMode: 'bundled' | 'directory'
   vaultSupported: boolean
+  vaultWritable: boolean
   vaultDirName: string | null
   vaultBusy: boolean
   onConnectVault: () => void
-  onDisconnectVault: () => void
+  onRequestDisconnect: () => void
   onExportZip: () => void
   onImportZip: (file: File) => void
 }
@@ -52,12 +52,12 @@ export function Sidebar({
   onOpenAI,
   aiOpen,
   stats,
-  vaultMode,
   vaultSupported,
+  vaultWritable,
   vaultDirName,
   vaultBusy,
   onConnectVault,
-  onDisconnectVault,
+  onRequestDisconnect,
   onExportZip,
   onImportZip,
 }: SidebarProps) {
@@ -148,11 +148,11 @@ export function Sidebar({
             Beta
           </span>
         </button>
-        {vaultMode === 'directory' ? (
+        {vaultWritable ? (
           <>
             <button
-              onClick={onDisconnectVault}
-              title={`已连接本地文件夹：${vaultDirName ?? ''}（点击断开）`}
+              onClick={onRequestDisconnect}
+              title={`已连接：${vaultDirName ?? ''}（点击断开）`}
               className="group w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-emerald-300/90 hover:bg-white/[0.04] transition-all"
             >
               <HardDrive className="w-4 h-4 shrink-0" />
@@ -195,16 +195,20 @@ export function Sidebar({
           <button
             onClick={onConnectVault}
             disabled={!vaultSupported || vaultBusy}
-            title={vaultSupported ? '连接本地 vault 文件夹，编辑即存盘' : '当前浏览器不支持文件系统访问'}
+            title={
+              vaultSupported
+                ? '连接本地 vault 文件夹，编辑直接写入 .md'
+                : '请使用 Chrome 或 Edge 连接本地文件夹'
+            }
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <FolderSync className="w-4 h-4" />
-            <span>{vaultSupported ? '连接本地文件夹' : '浏览器不支持'}</span>
+            <span>{vaultSupported ? '连接本地文件夹' : '需 Chrome / Edge'}</span>
           </button>
         )}
-        {vaultMode === 'bundled' && (
+        {!vaultWritable && (
           <p className="px-3 pt-1 text-[10px] text-text-tertiary leading-relaxed">
-            未连接时编辑仅存于浏览器
+            当前为只读演示，连接后解锁全部功能
           </p>
         )}
       </div>

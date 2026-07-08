@@ -33,11 +33,6 @@ import { DEFAULT_VISION_MODEL, getVisionModel, setVisionModel } from '../lib/ai/
 import { prepareImageDataUrl } from '../lib/ai/vision'
 import { identifyGearFromImage } from '../lib/ai/identify'
 import { buildItemFromVision, formatVisionSummary } from '../lib/ai/imageItem'
-import {
-  parseAddWishlistIntent,
-  isWishlistImportMessage,
-  importFromZFrontierLink,
-} from '../lib/zfrontier/wishlist'
 
 interface AIPanelProps {
   open: boolean
@@ -46,8 +41,8 @@ interface AIPanelProps {
   preferences: UserPreferences
   allTags: string[]
   selectedItem?: CollectionItem | null
+  readOnly?: boolean
   onApplyTags?: (itemId: string, tags: string[]) => void
-  onSaveWishlistItem?: (item: CollectionItem) => Promise<void>
   onSaveItem?: (item: CollectionItem) => Promise<void>
 }
 
@@ -77,8 +72,8 @@ export function AIPanel({
   preferences,
   allTags,
   selectedItem,
+  readOnly = false,
   onApplyTags,
-  onSaveWishlistItem,
   onSaveItem,
 }: AIPanelProps) {
   const [mode, setMode] = useState<AIMode>('chat')
@@ -209,53 +204,10 @@ export function AIPanel({
     }
   }
 
-  const runWishlistImport = useCallback(
-    async (text: string) => {
-      const intent = parseAddWishlistIntent(text)
-      if (!intent || !onSaveWishlistItem) return false
-
-      setLoading(true)
-      setError(null)
-      const userMsg: UIMessage = { role: 'user', content: text }
-      setMessages((prev) => [...prev, userMsg])
-      setInput('')
-
-      try {
-        const { item, sourceUrl, matchedTitle, categoryLabel, imageFileName } =
-          await importFromZFrontierLink(intent, items)
-        await onSaveWishlistItem(item)
-        const lines = [
-          `已从 zFrontier 链接抓取 **${matchedTitle}**，并加入${categoryLabel}心愿单。`,
-          '',
-          `- **分类**：${categoryLabel}`,
-          `- **名称**：${item.name}`,
-          item.brand ? `- **工作室**：${item.brand}` : null,
-          item.layout ? `- **配列**：${item.layout}` : null,
-          item.weight ? `- **配重**：${item.weight}` : null,
-          item.plate ? `- **定位板**：${item.plate}` : null,
-          item.profile ? `- **高度**：${item.profile}` : null,
-          item.material ? `- **材质**：${item.material}` : null,
-          item.switchType ? `- **类型**：${item.switchType}` : null,
-          item.price ? `- **参考价**：¥${item.price}${item.currency && item.currency !== 'CNY' ? ` ${item.currency}` : ''}` : null,
-          item.history?.[0]?.note ? `- **价格说明**：${item.history[0].note}` : null,
-          `- **来源**：[查看原帖](${sourceUrl})`,
-          imageFileName ? `- **主图**：\`${imageFileName}\` → vault/assets/images/` : null,
-        ].filter(Boolean)
-        setMessages((prev) => [...prev, { role: 'assistant', content: lines.join('\n') }])
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-      } finally {
-        setLoading(false)
-      }
-      return true
-    },
-    [items, onSaveWishlistItem],
-  )
 
   const handleSend = async () => {
     const text = input.trim()
     if (!text || loading) return
-    if (mode === 'chat' && (await runWishlistImport(text))) return
     setInput('')
     runAI(text)
   }
@@ -329,6 +281,7 @@ export function AIPanel({
             <h3 className="text-[14px] font-semibold">AI 助手</h3>
             <p className="text-[10px] text-text-tertiary">
               DeepSeek · {items.length} 件收藏已载入
+              {readOnly ? ' · 只读' : ''}
             </p>
           </div>
         </div>
@@ -350,6 +303,12 @@ export function AIPanel({
           </button>
         </div>
       </div>
+
+      {readOnly && (
+        <p className="mx-4 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-200/80 leading-relaxed">
+          只读演示模式：AI 可对话分析示例数据，连接文件夹后可保存识图结果与应用标签。
+        </p>
+      )}
 
       {/* API Settings */}
       {showSettings && (
@@ -436,9 +395,11 @@ export function AIPanel({
             <Bot className="w-8 h-8 text-text-tertiary/40 mb-3" />
             <p className="text-[12px] text-text-tertiary max-w-[240px] leading-relaxed">
               {mode === 'chat'
-                ? '粘贴 zFrontier 帖子链接，例如：帮我把这个链接中的套件加入愿望单 https://www.zfrontier.com/app/flow/…'
+                ? '基于当前收藏库与 AI 自由对话。配置 API Key 后即可使用（设置图标）。'
                 : mode === 'vision'
-                  ? '点击下方「选择图片识图」，上传套件/键帽/轴体照片。'
+                  ? readOnly
+                    ? '识图预览可用；连接文件夹后可保存到收藏。'
+                    : '点击下方「选择图片识图」，上传套件/键帽/轴体照片。'
                   : `点击下方「${quickActionLabel[mode]}」开始，或在输入框描述需求。`}
             </p>
           </div>
@@ -483,7 +444,7 @@ export function AIPanel({
                 </>
               )}
 
-              {msg.pendingItem && onSaveItem && (
+              {msg.pendingItem && onSaveItem && !readOnly && (
                 <button
                   onClick={() => saveVisionItem(msg.pendingItem!)}
                   disabled={loading}
@@ -506,7 +467,7 @@ export function AIPanel({
                       </span>
                     ))}
                   </div>
-                  {selectedItem && onApplyTags && (
+                  {selectedItem && onApplyTags && !readOnly && (
                     <button
                       onClick={() => onApplyTags(selectedItem.id, msg.suggestedTags!)}
                       className="text-[10px] px-2.5 py-1 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-all"
@@ -524,11 +485,7 @@ export function AIPanel({
           <div className="flex gap-2.5 items-center text-text-tertiary">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span className="text-[12px]">
-              {mode === 'vision' && loading
-                ? '正在识图…'
-                : messages.at(-1)?.role === 'user' && isWishlistImportMessage(messages.at(-1)?.content ?? '')
-                  ? '正在从 zFrontier 链接抓取信息…'
-                  : 'DeepSeek 思考中…'}
+              {mode === 'vision' && loading ? '正在识图…' : 'DeepSeek 思考中…'}
             </span>
           </div>
         )}
@@ -584,7 +541,7 @@ export function AIPanel({
             }}
             placeholder={
               mode === 'chat'
-                ? '输入消息，或粘贴 zFrontier 链接加入愿望单… (Enter 发送)'
+                ? '输入消息… (Enter 发送，需配置 API Key)'
                 : mode === 'recommend'
                   ? '描述使用场景，如「日常办公」「闷声打字」…'
                   : mode === 'tag'

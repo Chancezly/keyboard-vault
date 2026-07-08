@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CollectionItem } from './types'
 import {
-  getEffectiveItems,
+  getBundledItems,
   upsertItem as upsertLocal,
   deleteItem as deleteLocal,
 } from './store'
 import {
-  isFileSystemSupported,
   getSavedVaultDirectory,
   pickVaultDirectory,
   forgetVaultDirectory,
@@ -15,8 +14,10 @@ import {
   deleteItemFile,
   exportVaultZip,
   importVaultZip,
+  ensureVaultStructure,
   type VaultHandle,
 } from './fs'
+import { isVaultBrowserSupported } from './vaultCapabilities'
 import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
 import { assignItemFilePath, collectTakenBasenames } from './naming'
 
@@ -25,7 +26,10 @@ export type VaultMode = 'bundled' | 'directory'
 export interface VaultState {
   items: CollectionItem[]
   mode: VaultMode
+  /** 是否可连接并写入本地文件夹（Chrome / Edge） */
   supported: boolean
+  /** 已连接本地文件夹，可编辑存盘 */
+  writable: boolean
   dirName: string | null
   busy: boolean
   error: string | null
@@ -39,17 +43,19 @@ export interface VaultState {
 }
 
 export function useVault(): VaultState {
-  const [items, setItems] = useState<CollectionItem[]>(() => getEffectiveItems())
+  const [items, setItems] = useState<CollectionItem[]>(() => getBundledItems())
   const [mode, setMode] = useState<VaultMode>('bundled')
   const [handle, setHandle] = useState<VaultHandle | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const supported = isFileSystemSupported()
+  const supported = isVaultBrowserSupported()
+  const writable = mode === 'directory'
 
   const loadFromHandle = useCallback(async (h: VaultHandle) => {
     setBusy(true)
     setError(null)
     try {
+      await ensureVaultStructure(h)
       const loaded = await readVault(h)
       setHandle(h)
       setMode('directory')
@@ -57,7 +63,7 @@ export function useVault(): VaultState {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setMode('bundled')
-      setItems(getEffectiveItems())
+      setItems(getBundledItems())
     } finally {
       setBusy(false)
     }
@@ -66,7 +72,7 @@ export function useVault(): VaultState {
   // Try to restore a previously connected directory on first load.
   useEffect(() => {
     hydrateImageCache()
-      .then(() => setItems(getEffectiveItems()))
+      .then(() => setItems(getBundledItems()))
       .catch(() => {})
   }, [])
 
@@ -98,14 +104,14 @@ export function useVault(): VaultState {
     await forgetVaultDirectory()
     setHandle(null)
     setMode('bundled')
-    setItems(getEffectiveItems())
+    setItems(getBundledItems())
   }, [])
 
   const reload = useCallback(async () => {
     if (mode === 'directory' && handle) {
       setItems(await readVault(handle))
     } else {
-      setItems(getEffectiveItems())
+      setItems(getBundledItems())
     }
   }, [mode, handle])
 
@@ -132,14 +138,14 @@ export function useVault(): VaultState {
         }
       } else {
         const taken = collectTakenBasenames(
-          getEffectiveItems().filter((i) => i.id !== item.id),
+          getBundledItems().filter((i) => i.id !== item.id),
         )
         const withPath = assignItemFilePath(item, taken)
         const withImage = await persistHeroToImageStore(withPath)
         const saved = { ...withPath, ...withImage }
         upsertLocal(saved)
-        setItems(getEffectiveItems())
-        return getEffectiveItems().find((i) => i.id === item.id) ?? saved
+        setItems(getBundledItems())
+        return getBundledItems().find((i) => i.id === item.id) ?? saved
       }
     },
     [mode, handle],
@@ -159,7 +165,7 @@ export function useVault(): VaultState {
         }
       } else {
         deleteLocal(item.id)
-        setItems(getEffectiveItems())
+        setItems(getBundledItems())
       }
     },
     [mode, handle],
@@ -205,6 +211,7 @@ export function useVault(): VaultState {
     items,
     mode,
     supported,
+    writable,
     dirName: handle?.name ?? null,
     busy,
     error,
