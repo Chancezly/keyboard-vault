@@ -79,9 +79,13 @@ export default function App() {
 
   const handleSave = async (item: CollectionItem) => {
     if (readOnly) return
-    await vault.save(item)
-    setEditing(null)
-    setSelectedItem(item)
+    try {
+      const saved = await vault.save(item)
+      setEditing(null)
+      setSelectedItem(saved)
+    } catch {
+      // vault.error 已在 useVault 中设置，编辑弹窗保持打开便于重试
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -292,6 +296,7 @@ export default function App() {
           allTags={allTags}
           studioSuggestions={studioSuggestions}
           inventoryItems={items}
+          vaultError={vault.error}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}

@@ -2,7 +2,7 @@ import { Star } from 'lucide-react'
 import { formatRating } from './StarRating'
 import type { CollectionItem } from '../lib/types'
 import { STATUS_LABELS, STATUS_BADGE_COLORS } from '../lib/types'
-import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
+import { BUILD_PART_META, getBuildComposition, getBuildDisplayName } from '../lib/builds'
 import { getCardEyebrow, getCardMetrics } from '../lib/cardHighlights'
 
 interface ItemCardProps {
@@ -72,9 +72,12 @@ function CardMetrics({
 export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
   const isBuild = item.category === 'builds'
   const eyebrow = getCardEyebrow(item)
-  const buildParts = isBuild
-    ? BUILD_PARTS.map(({ role, label }) => {
-        const name = getBuildPartName(item.relations, role)
+  const displayName = isBuild ? getBuildDisplayName(item) : item.name
+  const fit = item.fitRating ?? item.rating
+  const composition = isBuild ? getBuildComposition(item) : null
+  const buildParts = composition
+    ? BUILD_PART_META.map(({ role, label }) => {
+        const name = composition[role].name.trim()
         return name ? `${label} ${name}` : null
       }).filter(Boolean)
     : []
@@ -93,7 +96,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
         <div className="w-[68px] h-[68px] rounded-[14px] overflow-hidden shrink-0 bg-white/[0.04] ring-1 ring-white/[0.06]">
           <img
             src={item.image}
-            alt={item.name}
+            alt={displayName}
             className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500 ease-out"
             loading="lazy"
           />
@@ -104,7 +107,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
             <p className="text-[11px] font-medium text-text-tertiary tracking-wide truncate">{eyebrow}</p>
           ) : null}
           <h3 className="text-[15px] font-semibold font-display tracking-tight truncate text-text-primary mt-0.5">
-            {item.name}
+            {displayName}
           </h3>
           {isBuild && buildParts.length > 0 ? (
             <p className="text-[11px] text-text-tertiary mt-1 truncate">{buildParts.join(' · ')}</p>
@@ -113,10 +116,10 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
 
         <div className="flex items-center gap-5 shrink-0">
           {!isBuild ? <CardMetrics item={item} layout="list-trailing" /> : null}
-          {item.rating ? (
+          {fit ? (
             <span className="flex items-center gap-1 text-[12px] text-amber-400/90 tabular-nums">
               <Star className="w-3.5 h-3.5 fill-current" />
-              {formatRating(item.rating)}
+              {formatRating(fit)}
             </span>
           ) : null}
           {!isBuild ? (
@@ -150,7 +153,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
       <div className="relative aspect-[4/3] overflow-hidden bg-white/[0.04]">
         <img
           src={item.image}
-          alt={item.name}
+          alt={displayName}
           className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-700 ease-out"
           loading="lazy"
         />
@@ -168,10 +171,10 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
           </span>
         )}
 
-        {item.rating ? (
+        {fit ? (
           <span className="absolute top-3 right-3 flex items-center gap-1 text-[11px] text-amber-200/95 bg-black/35 backdrop-blur-xl px-2 py-1 rounded-full tabular-nums">
             <Star className="w-3 h-3 fill-current" />
-            {formatRating(item.rating)}
+            {formatRating(fit)}
           </span>
         ) : null}
       </div>
@@ -186,7 +189,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
             eyebrow ? 'mt-1' : ''
           } ${item.category === 'switches' ? 'text-[16px]' : 'text-[15px]'} line-clamp-2`}
         >
-          {item.name}
+          {displayName}
         </h3>
 
         {isBuild && buildParts.length > 0 ? (

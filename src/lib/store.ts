@@ -1,3 +1,4 @@
+import { hydrateBuildItems } from './builds'
 import { loadCollection } from './collection'
 import type { CollectionItem, ItemRelation } from './types'
 import { resolveLocalImageRef } from './imageStore'
@@ -47,7 +48,7 @@ function resolveItemImages(item: CollectionItem): CollectionItem {
 
 /** 只读演示：内置 vault 示例，不合并 localStorage */
 export function getBundledItems(): CollectionItem[] {
-  return resolveRelations(loadCollection().map(resolveItemImages))
+  return hydrateBuildItems(resolveRelations(loadCollection().map(resolveItemImages)))
 }
 
 /** @deprecated v1 只读演示请用 getBundledItems；保留供旧逻辑兼容 */
@@ -62,7 +63,7 @@ export function getEffectiveItems(): CollectionItem[] {
     .map((i) => overrides[i.id] ?? i)
 
   const all = [...merged, ...custom.filter((c) => !deletedSet.has(c.id))]
-  return resolveRelations(all.map(resolveItemImages))
+  return hydrateBuildItems(resolveRelations(all.map(resolveItemImages)))
 }
 
 export function isCustom(id: string): boolean {
@@ -123,7 +124,7 @@ export function createBlankItem(category: CollectionItem['category']): Collectio
   return {
     id,
     name: '',
-    brand: category === 'builds' ? '' : '',
+    brand: '',
     category,
     status: category === 'builds' ? 'collection' : 'in-use',
     tags: [],
@@ -131,6 +132,14 @@ export function createBlankItem(category: CollectionItem['category']): Collectio
     image: '',
     images: [],
     relations: [],
+    buildComposition:
+      category === 'builds'
+        ? {
+            keyboard: { name: '' },
+            switches: { name: '' },
+            keycaps: { name: '' },
+          }
+        : undefined,
     history: [],
     content: '',
     currency: 'CNY',

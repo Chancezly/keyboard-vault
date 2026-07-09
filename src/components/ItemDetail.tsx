@@ -1,4 +1,4 @@
-import { X, Star, Tag, ExternalLink, Link2, History, Pencil } from 'lucide-react'
+import { X, Star, Tag, ExternalLink, History, Pencil } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { CollectionItem, ItemStatus } from '../lib/types'
@@ -6,14 +6,14 @@ import {
   STATUS_LABELS,
   STATUS_COLORS,
   CATEGORY_LABELS,
-  RELATION_LABELS,
   HISTORY_LABELS,
   RATING_DIMENSION_LABELS,
   RATING_DIMENSIONS,
   SOUND_TENDENCY_LABELS,
 } from '../lib/types'
-import { BUILD_PARTS, getBuildPartName } from '../lib/builds'
+import { BUILD_PART_META, getBuildComposition, getBuildDisplayName } from '../lib/builds'
 import {
+  getBuildCompositionFields,
   getExtraSpecFields,
   getSpecificationFields,
   getStateFields,
@@ -59,8 +59,12 @@ function DetailFieldGrid({ fields }: { fields: { label: string; value: string }[
 
 export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusChange }: ItemDetailProps) {
   const isBuild = item.category === 'builds'
-  const specFields = [...getSpecificationFields(item), ...getExtraSpecFields(item)]
+  const displayName = isBuild ? getBuildDisplayName(item) : item.name
+  const composition = isBuild ? getBuildComposition(item) : null
+  const buildSections = getBuildCompositionFields(item)
+  const specFields = isBuild ? [] : [...getSpecificationFields(item), ...getExtraSpecFields(item)]
   const stateFields = getStateFields(item)
+  const fit = item.fitRating ?? item.rating
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col lg:items-center lg:justify-center lg:p-8">
@@ -86,7 +90,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
 
         <div className="overflow-y-auto">
           <div className="relative h-48 sm:h-72 overflow-hidden">
-            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+            <img src={item.image} alt={displayName} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#141416] via-[#141416]/40 to-transparent" />
 
             <div className="absolute bottom-0 left-0 right-0 p-8">
@@ -115,11 +119,11 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
               {!isBuild && item.brand ? (
                 <p className="text-[13px] text-text-secondary font-medium">{item.brand}</p>
               ) : null}
-              <h2 className="text-3xl font-semibold tracking-tight mt-1 font-display">{item.name}</h2>
-              {isBuild && (
+              <h2 className="text-3xl font-semibold tracking-tight mt-1 font-display">{displayName}</h2>
+              {isBuild && composition && (
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {BUILD_PARTS.map(({ role, label }) => {
-                    const name = getBuildPartName(item.relations, role)
+                  {BUILD_PART_META.map(({ role, label }) => {
+                    const name = composition[role].name.trim()
                     if (!name) return null
                     return (
                       <span
@@ -135,6 +139,25 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             </div>
           </div>
 
+          {isBuild && buildSections.length > 0 && (
+            <div className="px-8 py-6 border-b border-white/[0.06]">
+              <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary mb-4">
+                {specSectionTitle(item.category)}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {buildSections.map((section) => (
+                  <div
+                    key={section.role}
+                    className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05] space-y-3"
+                  >
+                    <p className="text-[12px] font-medium text-accent">{section.label}</p>
+                    <DetailFieldGrid fields={section.fields} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {specFields.length > 0 && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary mb-4">
@@ -148,17 +171,35 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary mb-4">
               {stateSectionTitle(item.category)}
             </h3>
-            <DetailFieldGrid fields={stateFields} />
-            {item.rating ? (
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/[0.06]">
-                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span className="text-[14px] font-medium">{formatRating(item.rating)}</span>
-                <span className="text-[12px] text-text-tertiary">总评分</span>
+            {isBuild ? (
+              <div className="flex items-center gap-3">
+                {fit != null ? (
+                  <>
+                    <StarRating value={fit} readonly size="md" />
+                    <span className="text-[15px] font-semibold text-amber-400 tabular-nums">
+                      {formatRating(fit)}
+                    </span>
+                    <span className="text-[12px] text-text-tertiary">适配度</span>
+                  </>
+                ) : (
+                  <span className="text-[13px] text-text-tertiary">未评分</span>
+                )}
               </div>
-            ) : null}
+            ) : (
+              <>
+                <DetailFieldGrid fields={stateFields} />
+                {item.rating ? (
+                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/[0.06]">
+                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    <span className="text-[14px] font-medium">{formatRating(item.rating)}</span>
+                    <span className="text-[12px] text-text-tertiary">总评分</span>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
 
-          {item.tagGroups.length > 0 && (
+          {!isBuild && item.tagGroups.length > 0 && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <div className="space-y-2">
                 {item.tagGroups.map((tg) => (
@@ -185,27 +226,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             </div>
           )}
 
-          {item.relations.length > 0 && (
-            <div className="px-8 py-6 border-b border-white/[0.06]">
-              <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary mb-4">
-                <Link2 className="w-3.5 h-3.5" />
-                关联部件
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {item.relations.map((rel) => (
-                  <div key={rel.role} className="px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                    <p className="text-[10px] uppercase tracking-wider text-text-tertiary">
-                      {RELATION_LABELS[rel.role] ?? rel.role}
-                    </p>
-                    <p className="text-[13px] font-medium mt-1 truncate">{rel.name ?? rel.ref}</p>
-                    <p className="text-[10px] text-text-tertiary mt-0.5 font-mono">{rel.ref}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {item.ratingDetail && (
+          {!isBuild && item.ratingDetail && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary">
@@ -238,7 +259,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             </div>
           )}
 
-          {item.soundTendency != null && (
+          {!isBuild && item.soundTendency != null && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary">
@@ -270,7 +291,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             </div>
           )}
 
-          {item.history.length > 0 && (
+          {!isBuild && item.history.length > 0 && (
             <div className="px-8 py-6 border-b border-white/[0.06]">
               <h3 className="flex items-center gap-2 text-[12px] font-medium text-text-secondary mb-4">
                 <History className="w-3.5 h-3.5" />
@@ -307,7 +328,9 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             {item.content.trim() ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
             ) : (
-              <p className="text-text-tertiary not-prose text-[13px]">暂无体验描述</p>
+              <p className="text-text-tertiary not-prose text-[13px]">
+                {isBuild ? '暂无备注' : '暂无体验描述'}
+              </p>
             )}
           </div>
 

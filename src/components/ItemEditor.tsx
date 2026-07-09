@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Trash2, Download, Plus, Save, ChevronDown } from 'lucide-react'
-import type { CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
+import { X, Upload, Trash2, Download, Plus, Save } from 'lucide-react'
+import type { BuildComposition, CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
 import {
   CATEGORY_LABELS,
   STATUS_LABELS,
@@ -14,8 +14,21 @@ import {
   FILLING_OPTIONS,
   WEIGHT_OPTIONS,
   PCB_THICKNESS_OPTIONS,
+  KEYCAP_PROFILE_OPTIONS,
+  KEYCAP_MATERIAL_OPTIONS,
+  ACTUATION_PRESETS,
 } from '../lib/types'
-import { BUILD_PARTS, getBuildPartName, setBuildPart, inventoryNames } from '../lib/builds'
+import {
+  collectFieldOptions,
+  emptyBuildComposition,
+  getBuildComposition,
+  getBuildDisplayName,
+  inventoryByName,
+  inventoryNames,
+  isBuildCompositionComplete,
+  snapshotFromInventory,
+  syncBuildRelations,
+} from '../lib/builds'
 import { downloadMarkdown } from '../lib/serialize'
 import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
@@ -53,6 +66,7 @@ interface ItemEditorProps {
   allTags: string[]
   studioSuggestions: string[]
   inventoryItems: CollectionItem[]
+  vaultError?: string | null
   onSave: (item: CollectionItem) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -123,125 +137,22 @@ function SuggestInput({ value, onChange, placeholder, completions = [], suffix }
 }
 
 
-function BuildSecondaryFields({
-  draft,
-  set,
-  setRating,
-  computedOverall,
-  tagInput,
-  setTagInput,
-  addTag,
-  removeTag,
-  suggestedTags,
-  inputClass,
-}: {
-  draft: CollectionItem
-  set: <K extends keyof CollectionItem>(key: K, value: CollectionItem[K]) => void
-  setRating: (dim: (typeof RATING_DIMENSIONS)[number], value: number | undefined) => void
-  computedOverall: number | undefined
-  tagInput: string
-  setTagInput: (v: string) => void
-  addTag: () => void
-  removeTag: (tag: string) => void
-  suggestedTags: string[]
-  inputClass: string
-}) {
-  return (
-    <>
-      <div>
-        <Label>搭配总价 (¥)</Label>
-        <input
-          type="number"
-          className={inputClass}
-          value={draft.price ?? ''}
-          onChange={(e) => set('price', e.target.value === '' ? undefined : Number(e.target.value))}
-          placeholder="2200"
-        />
-      </div>
-      <div>
-        <Label>评分</Label>
-        <div className="space-y-3">
-          {computedOverall != null && (
-            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-              <span className="text-[11px] text-text-tertiary shrink-0">总分</span>
-              <StarRating value={computedOverall} readonly size="sm" />
-              <span className="text-[13px] font-semibold text-amber-400 tabular-nums">{formatRating(computedOverall)}</span>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-            {RATING_DIMENSIONS.map((dim) => (
-              <div key={dim} className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-text-tertiary shrink-0 w-8">{RATING_DIMENSION_LABELS[dim]}</span>
-                <StarRating value={draft.ratingDetail?.[dim]} onChange={(v) => setRating(dim, v)} size="sm" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div>
-        <Label>标签</Label>
-        <div className="flex gap-2 mb-2">
-          <input
-            className={inputClass}
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-            placeholder="输入标签后回车"
-          />
-          <button onClick={addTag} className="px-3 rounded-lg bg-white/[0.06] text-text-secondary hover:bg-white/[0.1] transition-all">
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        {draft.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {draft.tags.map((tag) => (
-              <span key={tag} className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-accent/15 text-accent">
-                {tag}
-                <button onClick={() => removeTag(tag)} className="hover:text-white">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        {suggestedTags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {suggestedTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => set('tags', [...draft.tags, tag])}
-                className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.04] text-text-tertiary border border-white/[0.08] hover:bg-white/[0.08]"
-              >
-                + {tag}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div>
-        <Label>搭配笔记</Label>
-        <textarea
-          className={`${inputClass} resize-none leading-relaxed`}
-          rows={4}
-          value={draft.content}
-          onChange={(e) => set('content', e.target.value)}
-          placeholder="记录这套搭配的使用感受、适用场景…"
-        />
-      </div>
-    </>
-  )
-}
-
-
-export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, onSave, onDelete, onClose }: ItemEditorProps) {
-  const [draft, setDraft] = useState<CollectionItem>(() =>
-    item.category === 'switches' && !item.lube ? { ...item, lube: '厂润' } : item,
-  )
+export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, vaultError, onSave, onDelete, onClose }: ItemEditorProps) {
+  const [draft, setDraft] = useState<CollectionItem>(() => {
+    const base =
+      item.category === 'switches' && !item.lube ? { ...item, lube: '厂润' } : { ...item }
+    if (base.category === 'builds' && !base.buildComposition) {
+      base.buildComposition = emptyBuildComposition()
+    }
+    return base
+  })
   const [tagInput, setTagInput] = useState('')
-  const [buildMoreOpen, setBuildMoreOpen] = useState(false)
+  /** 用户是否主动上传过搭配封面（否则保存时快照套件图） */
+  const [coverUploaded, setCoverUploaded] = useState(() => Boolean(item.image && item.category === 'builds'))
+  const [saveError, setSaveError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const isBuild = draft.category === 'builds'
+  const composition = getBuildComposition(draft)
 
   const set = <K extends keyof CollectionItem>(key: K, value: CollectionItem[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -252,13 +163,61 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
       category: c,
       lube: c === 'switches' && !d.lube ? '厂润' : d.lube,
       brand: c === 'builds' ? '' : d.brand,
+      buildComposition: c === 'builds' ? d.buildComposition ?? emptyBuildComposition() : undefined,
     }))
 
-  const setBuildPartField = (role: string, category: ItemCategory, value: string) => {
-    setDraft((d) => ({
-      ...d,
-      relations: setBuildPart(d.relations, role, category, value, inventoryItems),
-    }))
+  const patchComposition = (patch: Partial<BuildComposition>) => {
+    setDraft((d) => {
+      const next = { ...getBuildComposition(d), ...patch }
+      return { ...d, buildComposition: next }
+    })
+  }
+
+  const selectPartFromInventory = (
+    role: 'keyboard' | 'switches' | 'keycaps',
+    category: ItemCategory,
+    name: string,
+  ) => {
+    const match = inventoryByName(inventoryItems, category, name)
+    if (match) {
+      const snap = snapshotFromInventory(match)
+      setDraft((d) => {
+        const nextComp = { ...getBuildComposition(d), ...snap }
+        const useKbCover = role === 'keyboard' && !coverUploaded && Boolean(match.image)
+        return {
+          ...d,
+          buildComposition: nextComp,
+          ...(useKbCover ? { image: match.image, images: [match.image] } : {}),
+        }
+      })
+      return
+    }
+    // 手填名称：只更新名称，清掉 sourceId
+    if (role === 'keyboard') {
+      patchComposition({
+        keyboard: {
+          name: name.trim(),
+          brand: composition.keyboard.brand,
+          plate: composition.keyboard.plate,
+          pcbThickness: composition.keyboard.pcbThickness,
+        },
+      })
+    } else if (role === 'switches') {
+      patchComposition({
+        switches: {
+          name: name.trim(),
+          actuation: composition.switches.actuation,
+        },
+      })
+    } else {
+      patchComposition({
+        keycaps: {
+          name: name.trim(),
+          profile: composition.keycaps.profile,
+          material: composition.keycaps.material,
+        },
+      })
+    }
   }
 
   const setRating = (dim: (typeof RATING_DIMENSIONS)[number], value: number | undefined) => {
@@ -268,14 +227,31 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
     })
   }
 
+  const setFitRating = (value: number | undefined) => {
+    setDraft((d) => ({
+      ...d,
+      fitRating: value,
+      rating: value,
+      ratingDetail: value != null ? { overall: value, scale: 5 } : undefined,
+    }))
+  }
+
   const computedOverall = computeOverallRating(draft.ratingDetail)
 
   const suggestedTags = allTags.filter((t) => !draft.tags.includes(t))
+
+  const brandOptions = collectFieldOptions(inventoryItems, 'keyboards', 'brand', studioSuggestions)
+  const plateOptions = collectFieldOptions(inventoryItems, 'keyboards', 'plate', PLATE_OPTIONS)
+  const pcbOptions = collectFieldOptions(inventoryItems, 'keyboards', 'pcbThickness', PCB_THICKNESS_OPTIONS)
+  const actuationOptions = collectFieldOptions(inventoryItems, 'switches', 'actuation', ACTUATION_PRESETS)
+  const profileOptions = collectFieldOptions(inventoryItems, 'keycaps', 'profile', KEYCAP_PROFILE_OPTIONS)
+  const materialOptions = collectFieldOptions(inventoryItems, 'keycaps', 'material', KEYCAP_MATERIAL_OPTIONS)
 
   const handleImage = (file: File) => {
     const reader = new FileReader()
     reader.onload = () => {
       const url = reader.result as string
+      setCoverUploaded(true)
       setDraft((d) => ({ ...d, image: url, images: [url, ...d.images.slice(1)] }))
     }
     reader.readAsDataURL(file)
@@ -291,11 +267,51 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
   const removeTag = (tag: string) => set('tags', draft.tags.filter((t) => t !== tag))
 
   const handleSave = () => {
+    setSaveError(null)
+
+    if (draft.category === 'builds') {
+      const c = getBuildComposition(draft)
+      if (!isBuildCompositionComplete(c)) {
+        setSaveError('请填写套件、轴体、键帽的名称（三项都必须有）')
+        return
+      }
+
+      let image = draft.image
+      let images = draft.images
+      if (!coverUploaded || !image) {
+        const kb = inventoryByName(inventoryItems, 'keyboards', c.keyboard.name)
+          ?? (c.keyboard.sourceId
+            ? inventoryItems.find((i) => i.id === c.keyboard.sourceId)
+            : undefined)
+        if (kb?.image) {
+          image = kb.image
+          images = [kb.image]
+        }
+      }
+
+      const fit = draft.fitRating ?? draft.rating
+      const normalized = syncBuildRelations({
+        ...draft,
+        name: draft.name.trim(),
+        brand: '',
+        image,
+        images,
+        buildComposition: c,
+        fitRating: fit,
+        rating: fit,
+        ratingDetail: fit != null ? { overall: fit, scale: 5 } : undefined,
+        tagGroups: [],
+        tags: [],
+        status: 'collection',
+      })
+      onSave(normalized)
+      return
+    }
+
     const rd = normalizeRatingDetail(draft.ratingDetail)
     const normalized: CollectionItem = {
       ...draft,
       name: draft.name.trim() || '未命名',
-      brand: draft.category === 'builds' ? draft.brand || '自定义' : draft.brand,
       tagGroups: draft.tags.length ? [{ group: '', values: draft.tags }] : [],
       rating: rd?.overall,
       ratingDetail: rd,
@@ -309,10 +325,12 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
       if (window.confirm('确定放弃新建？')) onClose()
       return
     }
-    if (!window.confirm(`确定删除「${draft.name || '此收藏'}」？此操作不可撤销。`)) return
+    if (!window.confirm(`确定删除「${getBuildDisplayName(draft) || draft.name || '此收藏'}」？此操作不可撤销。`)) return
     onDelete(draft.id)
     onClose()
   }
+
+  const previewTitle = isBuild ? getBuildDisplayName(draft) : draft.name
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col lg:items-center lg:justify-center lg:p-6">
@@ -321,7 +339,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
       <div className="relative w-full h-full lg:h-auto lg:max-w-2xl lg:max-h-[90vh] glass-strong lg:rounded-3xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:pt-0 lg:pb-0">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
-          <h2 className="text-[15px] font-semibold">{isNew ? '新增收藏' : '编辑收藏'}</h2>
+          <h2 className="text-[15px] font-semibold">{isNew ? (isBuild ? '新增搭配' : '新增收藏') : (isBuild ? '编辑搭配' : '编辑收藏')}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-all">
             <X className="w-4 h-4" />
           </button>
@@ -331,7 +349,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         <div className="overflow-y-auto px-6 py-5 space-y-5">
           {/* Image uploader */}
           <div>
-            <Label>封面图片</Label>
+            <Label>封面图片{isBuild ? '（可选；不上传则使用套件图）' : ''}</Label>
             <div
               onClick={() => fileRef.current?.click()}
               className="relative h-40 rounded-xl overflow-hidden bg-white/[0.03] border border-dashed border-white/[0.12] cursor-pointer hover:border-accent/40 transition-all flex items-center justify-center group"
@@ -348,7 +366,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
               ) : (
                 <div className="flex flex-col items-center gap-2 text-text-tertiary">
                   <Upload className="w-6 h-6" />
-                  <span className="text-[12px]">点击上传本地图片</span>
+                  <span className="text-[12px]">{isBuild ? '点击上传搭配图，或不上传以使用套件图' : '点击上传本地图片'}</span>
                 </div>
               )}
             </div>
@@ -359,6 +377,9 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
               className="hidden"
               onChange={(e) => e.target.files?.[0] && handleImage(e.target.files[0])}
             />
+            {isBuild && draft.image && !coverUploaded && (
+              <p className="text-[10px] text-text-tertiary mt-1.5">当前预览为套件图快照，保存后写入本搭配</p>
+            )}
           </div>
 
           {/* Basic */}
@@ -366,13 +387,16 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>搭配名称</Label>
+                  <Label>搭配名称（选填）</Label>
                   <input
                     className={inputClass}
                     value={draft.name}
                     onChange={(e) => set('name', e.target.value)}
-                    placeholder="例如 日常办公套装"
+                    placeholder="不填则显示「套件名 + 轴体名」"
                   />
+                  {previewTitle && !draft.name.trim() && composition.keyboard.name && (
+                    <p className="text-[10px] text-text-tertiary mt-1">预览标题：{previewTitle}</p>
+                  )}
                 </div>
                 <div>
                   <Label>分类</Label>
@@ -384,74 +408,170 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                 </div>
               </div>
 
-              {/* 核心：套件 + 键帽 + 轴体 */}
-              <div className="p-4 rounded-xl bg-accent/5 border border-accent/15 space-y-4">
+              <div className="p-4 rounded-xl bg-accent/5 border border-accent/15 space-y-5">
                 <div>
                   <p className="text-[12px] font-medium text-text-primary">搭配组成</p>
                   <p className="text-[10px] text-text-tertiary mt-0.5">
-                    记录已有或曾经用过的组合，可从库存选择，也可手动输入
+                    套件 + 轴体 + 键帽（均必填）。可从库存快速选择自动带入字段，也可手填；内容仅保存在本搭配。
                   </p>
                 </div>
-                {BUILD_PARTS.map(({ role, label, category: cat }) => (
-                  <div key={role}>
-                    <Label>{label}</Label>
+
+                {/* 套件 */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-medium text-accent">套件</p>
+                  <div>
+                    <Label>名称</Label>
                     <ComboSelect
-                      value={getBuildPartName(draft.relations, role)}
-                      onChange={(v) => setBuildPartField(role, cat, v)}
-                      options={inventoryNames(inventoryItems, cat)}
-                      placeholder={`选择或输入${label}名称`}
+                      value={composition.keyboard.name}
+                      onChange={(v) => selectPartFromInventory('keyboard', 'keyboards', v)}
+                      options={inventoryNames(inventoryItems, 'keyboards')}
+                      placeholder="选择或输入套件名称"
                     />
                   </div>
-                ))}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label>工作室</Label>
+                      <ComboSelect
+                        value={composition.keyboard.brand ?? ''}
+                        onChange={(v) =>
+                          patchComposition({
+                            keyboard: { ...composition.keyboard, brand: v || undefined },
+                          })
+                        }
+                        options={brandOptions}
+                        placeholder="选填"
+                      />
+                    </div>
+                    <div>
+                      <Label>定位板</Label>
+                      <ComboSelect
+                        value={composition.keyboard.plate ?? ''}
+                        onChange={(v) =>
+                          patchComposition({
+                            keyboard: { ...composition.keyboard, plate: v || undefined },
+                          })
+                        }
+                        options={plateOptions}
+                        placeholder="选填"
+                      />
+                    </div>
+                    <div>
+                      <Label>PCB厚度</Label>
+                      <ComboSelect
+                        value={composition.keyboard.pcbThickness ?? ''}
+                        onChange={(v) =>
+                          patchComposition({
+                            keyboard: { ...composition.keyboard, pcbThickness: v || undefined },
+                          })
+                        }
+                        options={pcbOptions}
+                        placeholder="选填"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 轴体 */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-medium text-accent">轴体</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>名称</Label>
+                      <ComboSelect
+                        value={composition.switches.name}
+                        onChange={(v) => selectPartFromInventory('switches', 'switches', v)}
+                        options={inventoryNames(inventoryItems, 'switches')}
+                        placeholder="选择或输入轴体名称"
+                      />
+                    </div>
+                    <div>
+                      <Label>触发压力</Label>
+                      <ComboSelect
+                        value={composition.switches.actuation ?? ''}
+                        onChange={(v) =>
+                          patchComposition({
+                            switches: { ...composition.switches, actuation: v || undefined },
+                          })
+                        }
+                        options={actuationOptions}
+                        placeholder="选填，如 50g"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 键帽 */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-medium text-accent">键帽</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label>名称</Label>
+                      <ComboSelect
+                        value={composition.keycaps.name}
+                        onChange={(v) => selectPartFromInventory('keycaps', 'keycaps', v)}
+                        options={inventoryNames(inventoryItems, 'keycaps')}
+                        placeholder="选择或输入键帽名称"
+                      />
+                    </div>
+                    <div>
+                      <Label>高度</Label>
+                      <ComboSelect
+                        value={composition.keycaps.profile ?? ''}
+                        onChange={(v) =>
+                          patchComposition({
+                            keycaps: { ...composition.keycaps, profile: v || undefined },
+                          })
+                        }
+                        options={profileOptions}
+                        placeholder="选填"
+                      />
+                    </div>
+                    <div>
+                      <Label>材质</Label>
+                      <ComboSelect
+                        value={composition.keycaps.material ?? ''}
+                        onChange={(v) =>
+                          patchComposition({
+                            keycaps: { ...composition.keycaps, material: v || undefined },
+                          })
+                        }
+                        options={materialOptions}
+                        placeholder="选填"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 次要信息折叠 */}
-              <div className="rounded-xl border border-white/[0.08] overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setBuildMoreOpen((o) => !o)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-[12px] text-text-secondary hover:bg-white/[0.04] transition-all"
-                >
-                  <span>更多选项（配列、评分、标签…）</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${buildMoreOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {buildMoreOpen && (
-                  <div className="px-4 pb-4 pt-1 space-y-5 border-t border-white/[0.06]">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>配列</Label>
-                        <ComboSelect
-                          value={draft.layout ?? ''}
-                          onChange={(v) => set('layout', v || undefined)}
-                          options={KEYBOARD_LAYOUTS}
-                          placeholder="65%"
-                        />
-                      </div>
-                      <div>
-                        <Label>结构</Label>
-                        <input
-                          className={inputClass}
-                          value={draft.mount ?? ''}
-                          onChange={(e) => set('mount', e.target.value || undefined)}
-                          placeholder="Gasket"
-                        />
-                      </div>
-                    </div>
-                    <BuildSecondaryFields
-                      draft={draft}
-                      set={set}
-                      setRating={setRating}
-                      computedOverall={computedOverall}
-                      tagInput={tagInput}
-                      setTagInput={setTagInput}
-                      addTag={addTag}
-                      removeTag={removeTag}
-                      suggestedTags={suggestedTags}
-                      inputClass={inputClass}
-                    />
-                  </div>
-                )}
+              <div>
+                <Label>适配度（选填）</Label>
+                <div className="flex items-center gap-3">
+                  <StarRating value={draft.fitRating ?? draft.rating} onChange={setFitRating} />
+                  {(draft.fitRating ?? draft.rating) != null && (
+                    <span className="text-[13px] font-semibold text-amber-400 tabular-nums">
+                      {formatRating(draft.fitRating ?? draft.rating)}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-text-tertiary">可不评</span>
+                </div>
               </div>
+
+              <div>
+                <Label>备注 / 体验</Label>
+                <textarea
+                  className={`${inputClass} resize-none leading-relaxed`}
+                  rows={4}
+                  value={draft.content}
+                  onChange={(e) => set('content', e.target.value)}
+                  placeholder="记录这套搭配的使用感受、适用场景…"
+                />
+              </div>
+
+              {(saveError || vaultError) && (
+                <p className="text-[12px] text-red-300 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                  {saveError || vaultError}
+                </p>
+              )}
             </>
           ) : (
             <>
@@ -801,3 +921,4 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
     </div>
   )
 }
+

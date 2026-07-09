@@ -15,6 +15,7 @@ import {
   exportVaultZip,
   importVaultZip,
   ensureVaultStructure,
+  stabilizeImageRefs,
   type VaultHandle,
 } from './fs'
 import { isVaultBrowserSupported } from './vaultCapabilities'
@@ -121,10 +122,12 @@ export function useVault(): VaultState {
         setBusy(true)
         setError(null)
         try {
+          // 必须在 readVault 之前把 blob: 还原成文件名，否则 revoke 后无法写主图
+          const stabilized = stabilizeImageRefs(item)
           const taken = collectTakenBasenames(
-            (await readVault(handle)).filter((i) => i.id !== item.id),
+            (await readVault(handle)).filter((i) => i.id !== stabilized.id),
           )
-          const toSave = assignItemFilePath(item, taken)
+          const toSave = assignItemFilePath(stabilized, taken)
           await writeItem(handle, toSave)
           const loaded = await readVault(handle)
           setItems(loaded)

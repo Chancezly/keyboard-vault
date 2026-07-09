@@ -1,7 +1,25 @@
 import type { CollectionItem, UserPreferences } from '../types'
 import { CATEGORY_LABELS, RATING_DIMENSION_LABELS, SOUND_TENDENCY_LABELS, STATUS_LABELS } from '../types'
+import { getBuildComposition, getBuildDisplayName } from '../builds'
 
 function itemSummary(item: CollectionItem): Record<string, unknown> {
+  if (item.category === 'builds') {
+    const c = getBuildComposition(item)
+    return {
+      id: item.id,
+      name: getBuildDisplayName(item),
+      customName: item.name.trim() || undefined,
+      category: CATEGORY_LABELS.builds,
+      fitRating: item.fitRating ?? item.rating,
+      composition: {
+        keyboard: c.keyboard,
+        switches: c.switches,
+        keycaps: c.keycaps,
+      },
+      notes: item.content.trim() ? item.content.trim().slice(0, 400) : undefined,
+    }
+  }
+
   const base: Record<string, unknown> = {
     id: item.id,
     name: item.name,

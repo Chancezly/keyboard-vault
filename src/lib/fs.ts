@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { hydrateBuildItems } from './builds'
 import { parseItemMarkdown } from './parser'
 import { serializeItem } from './serialize'
 import type { CollectionItem, ItemCategory, ItemRelation } from './types'
@@ -138,6 +139,15 @@ function trackImageUrl(name: string, url: string) {
   imageObjectUrls.push(url)
 }
 
+/** 把仍可追踪的 blob: 主图还原成磁盘文件名，避免 readVault 吊销 URL 后无法保存 */
+export function stabilizeImageRefs(item: CollectionItem): CollectionItem {
+  const refs = (item.images.length ? item.images : item.image ? [item.image] : []).map((ref) => {
+    if (!ref.startsWith('blob:')) return ref
+    return imageNameByUrl.get(ref) ?? ref
+  })
+  return { ...item, images: refs, image: refs[0] ?? '' }
+}
+
 function revokeImageUrls() {
   imageObjectUrls.forEach((u) => URL.revokeObjectURL(u))
   imageObjectUrls = []
@@ -240,7 +250,7 @@ export async function readVault(handle: VaultHandle): Promise<CollectionItem[]> 
     })
   }
 
-  return items
+  return hydrateBuildItems(items)
 }
 
 async function removeStaleItemMd(
@@ -341,8 +351,9 @@ async function persistImages(handle: VaultHandle, item: CollectionItem): Promise
       const fileName = `${baseName}.${ext}`
       await writeImageFile(handle, fileName, bytes)
       return [fileName]
-    } catch {
-      throw new Error('主图 blob 无法写入 vault/assets/images/')
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      throw new Error(`主图 blob 无法写入 vault/assets/images/（${detail}）`)
     }
   }
 

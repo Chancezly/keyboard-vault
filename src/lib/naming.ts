@@ -1,3 +1,4 @@
+import { getBuildDisplayName } from './builds'
 import type { CollectionItem, ItemCategory } from './types'
 
 const INVALID_FS = /[/\\:*?"<>|]/g
@@ -6,10 +7,19 @@ function cleanSegment(value: string): string {
   return value.replace(INVALID_FS, '-').replace(/\s+/g, ' ').trim()
 }
 
-/** 显示用文件名：`【工作室-套件名】` 或 `【套件名】` */
-export function itemDisplayBasename(item: Pick<CollectionItem, 'name' | 'brand' | 'id'>): string {
-  const name = cleanSegment(item.name.trim())
+/** 显示用文件名：`【工作室-套件名】` 或 `【套件名】`；搭配用展示名 */
+export function itemDisplayBasename(
+  item: Pick<CollectionItem, 'name' | 'brand' | 'id'> &
+    Partial<Pick<CollectionItem, 'category' | 'buildComposition'>>,
+): string {
+  const raw =
+    item.category === 'builds'
+      ? getBuildDisplayName(item as CollectionItem)
+      : item.name.trim()
+  const name = cleanSegment(raw)
   if (!name) return item.id
+
+  if (item.category === 'builds') return `【${name}】`
 
   const brand = cleanSegment(item.brand?.trim() ?? '')
   if (brand && brand.toLowerCase() !== name.toLowerCase() && !name.toLowerCase().includes(brand.toLowerCase())) {

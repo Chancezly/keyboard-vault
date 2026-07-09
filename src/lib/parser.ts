@@ -1,5 +1,9 @@
 import { parse as parseYaml } from 'yaml'
 import type {
+  BuildComposition,
+  BuildKeycapPart,
+  BuildKeyboardPart,
+  BuildSwitchPart,
   CollectionItem,
   HistoryEvent,
   ItemCategory,
@@ -57,6 +61,11 @@ interface ItemFrontmatter {
     acquired?: string
     price?: number
     currency?: string
+  }
+  composition?: {
+    keyboard?: Partial<BuildKeyboardPart>
+    switches?: Partial<BuildSwitchPart>
+    keycaps?: Partial<BuildKeycapPart>
   }
   relations?: Record<string, string>
   rating?: {
@@ -128,6 +137,53 @@ function buildRatingDetail(rating: ItemFrontmatter['rating']): RatingDetail | un
   return normalizeRatingDetail(detail)
 }
 
+function parseComposition(
+  fm: ItemFrontmatter,
+  relations: ItemRelation[],
+): BuildComposition | undefined {
+  const c = fm.composition
+  if (c?.keyboard || c?.switches || c?.keycaps) {
+    const findName = (role: string) =>
+      relations.find((r) => r.role === role)?.name ??
+      relations.find((r) => r.role === role)?.ref ??
+      ''
+    return {
+      keyboard: {
+        name: c.keyboard?.name?.trim() || findName('keyboard'),
+        brand: c.keyboard?.brand,
+        plate: c.keyboard?.plate,
+        pcbThickness: c.keyboard?.pcbThickness,
+        sourceId: c.keyboard?.sourceId,
+      },
+      switches: {
+        name: c.switches?.name?.trim() || findName('switches'),
+        actuation: c.switches?.actuation,
+        sourceId: c.switches?.sourceId,
+      },
+      keycaps: {
+        name: c.keycaps?.name?.trim() || findName('keycaps'),
+        profile: c.keycaps?.profile,
+        material: c.keycaps?.material,
+        sourceId: c.keycaps?.sourceId,
+      },
+    }
+  }
+
+  if (!relations.length) return undefined
+
+  const byRole = (role: string) => relations.find((r) => r.role === role)
+  const kb = byRole('keyboard')
+  const sw = byRole('switches')
+  const kc = byRole('keycaps')
+  if (!kb && !sw && !kc) return undefined
+
+  return {
+    keyboard: { name: kb?.name ?? kb?.ref ?? '', sourceId: kb?.ref },
+    switches: { name: sw?.name ?? sw?.ref ?? '', sourceId: sw?.ref },
+    keycaps: { name: kc?.name ?? kc?.ref ?? '', sourceId: kc?.ref },
+  }
+}
+
 export function parseItemMarkdown(
   raw: string,
   category: ItemCategory,
@@ -142,6 +198,7 @@ export function parseItemMarkdown(
   const history = fm.history ?? []
   const images = [fm.images?.hero, ...(fm.images?.gallery ?? [])].filter(Boolean) as string[]
   const { flat: tags, groups: tagGroups } = normalizeTags(fm.tags)
+  const relations = normalizeRelations(fm.relations)
 
   const acquisition = history.find((h) => h.price != null) ?? history.find((h) => h.date)
   const acquired = state.acquired ?? legacyBuild.acquired ?? acquisition?.date
@@ -151,11 +208,14 @@ export function parseItemMarkdown(
   const currency = state.currency ?? legacyBuild.currency ?? acquisition?.currency ?? 'CNY'
 
   const ratingDetail = buildRatingDetail(fm.rating)
+  const isBuild = category === 'builds'
+  const fitRating = isBuild ? ratingDetail?.overall : undefined
+  const buildComposition = isBuild ? parseComposition(fm, relations) : undefined
 
   return {
     id: identity.id ?? filePath,
-    name: identity.name ?? 'Untitled',
-    brand: identity.brand ?? identity.maker ?? 'Unknown',
+    name: identity.name ?? (isBuild ? '' : 'Untitled'),
+    brand: identity.brand ?? identity.maker ?? (isBuild ? '' : 'Unknown'),
     category,
     status: normalizeStatus(state.status ?? identity.status),
     condition: state.condition,
@@ -164,8 +224,13 @@ export function parseItemMarkdown(
     tagGroups,
     image: images[0] ?? '',
     images,
-    rating: ratingDetail?.overall,
-    ratingDetail,
+    rating: isBuild ? fitRating : ratingDetail?.overall,
+    ratingDetail: isBuild
+      ? fitRating != null
+        ? { overall: fitRating, scale: 5 }
+        : undefined
+      : ratingDetail,
+    fitRating,
     acquired,
     addedAt,
     price,
@@ -192,7 +257,8 @@ export function parseItemMarkdown(
     spring: specification.spring,
     lube: specification.lube,
     soundTendency: specification.soundTendency,
-    relations: normalizeRelations(fm.relations),
+    relations,
+    buildComposition,
     history,
     content,
     filePath,

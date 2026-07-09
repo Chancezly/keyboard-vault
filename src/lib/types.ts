@@ -9,6 +9,34 @@ export interface ItemRelation {
   category?: ItemCategory
 }
 
+/** 搭配组成快照（套件 + 轴体 + 键帽） */
+export interface BuildKeyboardPart {
+  name: string
+  brand?: string
+  plate?: string
+  pcbThickness?: string
+  sourceId?: string
+}
+
+export interface BuildSwitchPart {
+  name: string
+  actuation?: string
+  sourceId?: string
+}
+
+export interface BuildKeycapPart {
+  name: string
+  profile?: string
+  material?: string
+  sourceId?: string
+}
+
+export interface BuildComposition {
+  keyboard: BuildKeyboardPart
+  switches: BuildSwitchPart
+  keycaps: BuildKeycapPart
+}
+
 export interface HistoryEvent {
   date?: string
   event: string
@@ -97,6 +125,14 @@ export interface CollectionItem {
   lube?: string
   soundTendency?: number
   relations: ItemRelation[]
+  /** 搭配专用：三件部件快照；非 builds 为空 */
+  buildComposition?: BuildComposition
+  /**
+   * 搭配专用：适配度 1–5 星（可空）。
+   * 非搭配仍用 rating / ratingDetail 表示综合评分。
+   * 搭配场景下 rating 与 fitRating 同步，便于卡片复用。
+   */
+  fitRating?: number
   history: HistoryEvent[]
   content: string
   filePath: string
@@ -210,6 +246,9 @@ export const PCB_THICKNESS_OPTIONS = ['1.2mm', '1.6mm']
 export const PLATE_OPTIONS = ['Fr4', '铝', 'PP', 'PC', '碳纤维', '铜']
 export const FILLING_OPTIONS = ['全棉', '无棉']
 export const WEIGHT_OPTIONS = ['无', '铝', '铜', '刀纹', 'PVD']
+export const KEYCAP_PROFILE_OPTIONS = ['Cherry', 'OEM', 'SA', 'DSA', 'XDA', 'MDA', 'KCA', 'MT3']
+export const KEYCAP_MATERIAL_OPTIONS = ['PBT', 'ABS', 'POM']
+export const ACTUATION_PRESETS = ['35g', '40g', '45g', '50g', '55g', '60g', '62g', '65g', '70g']
 
 export type SpecFieldKey =
   | 'layout'

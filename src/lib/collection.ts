@@ -1,3 +1,4 @@
+import { hydrateBuildItems, getBuildComposition, getBuildDisplayName } from './builds'
 import { parseItemMarkdown, parsePreferencesMarkdown } from './parser'
 import type { CollectionItem, ItemCategory, SortOption, UserPreferences } from './types'
 
@@ -60,7 +61,7 @@ export function loadCollection(): CollectionItem[] {
     })
   }
 
-  return items
+  return hydrateBuildItems(items)
 }
 
 export function loadPreferences(): UserPreferences {
@@ -95,12 +96,21 @@ export function filterItems(
 
   return items.filter((item) => {
     if (category !== 'all' && item.category !== category) return false
-    if (status !== 'all' && item.status !== status) return false
+    // 搭配暂不按状态筛选
+    if (status !== 'all' && item.category !== 'builds' && item.status !== status) return false
     if (!q) return true
 
+    const display = item.category === 'builds' ? getBuildDisplayName(item) : item.name
+    const c = item.category === 'builds' ? getBuildComposition(item) : null
+    const partHay = c
+      ? [c.keyboard.name, c.keyboard.brand, c.switches.name, c.keycaps.name].join(' ')
+      : ''
+
     return (
+      display.toLowerCase().includes(q) ||
       item.name.toLowerCase().includes(q) ||
       item.brand.toLowerCase().includes(q) ||
+      partHay.toLowerCase().includes(q) ||
       item.tags.some((t) => t.toLowerCase().includes(q)) ||
       item.content.toLowerCase().includes(q)
     )
@@ -117,7 +127,11 @@ export function sortItems(items: CollectionItem[], sortBy: SortOption): Collecti
   const sorted = [...items]
   switch (sortBy) {
     case 'name':
-      sorted.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+      sorted.sort((a, b) => {
+        const an = a.category === 'builds' ? getBuildDisplayName(a) : a.name
+        const bn = b.category === 'builds' ? getBuildDisplayName(b) : b.name
+        return an.localeCompare(bn, 'zh-CN')
+      })
       break
     case 'addedAt':
       sorted.sort(
