@@ -262,6 +262,7 @@ export function parseItemMarkdown(
     history,
     content,
     filePath,
+    sourceFrontmatter: data,
   }
 }
 

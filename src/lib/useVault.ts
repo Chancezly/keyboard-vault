@@ -52,6 +52,15 @@ export function useVault(): VaultState {
   const supported = isVaultBrowserSupported()
   const writable = mode === 'directory'
 
+  const downloadBackup = useCallback((blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }, [])
+
   const loadFromHandle = useCallback(async (h: VaultHandle) => {
     setBusy(true)
     setError(null)
@@ -179,26 +188,28 @@ export function useVault(): VaultState {
     setBusy(true)
     try {
       const blob = await exportVaultZip(handle)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
       const stamp = new Date().toISOString().slice(0, 10)
-      a.href = url
-      a.download = `${handle.name || 'vault'}-backup-${stamp}.zip`
-      a.click()
-      URL.revokeObjectURL(url)
+      downloadBackup(blob, `${handle.name || 'vault'}-backup-${stamp}.zip`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
-  }, [mode, handle])
+  }, [mode, handle, downloadBackup])
 
   const importZip = useCallback(
     async (file: File) => {
       if (mode !== 'directory' || !handle) return
+      const confirmed = window.confirm(
+        '恢复会完整替换当前 vault。继续前应用会自动下载一份当前数据备份，是否继续？',
+      )
+      if (!confirmed) return
       setBusy(true)
       setError(null)
       try {
+        const before = await exportVaultZip(handle)
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+        downloadBackup(before, `${handle.name || 'vault'}-before-restore-${stamp}.zip`)
         await importVaultZip(handle, file)
         setItems(await readVault(handle))
       } catch (e) {
@@ -207,7 +218,7 @@ export function useVault(): VaultState {
         setBusy(false)
       }
     },
-    [mode, handle],
+    [mode, handle, downloadBackup],
   )
 
   return {

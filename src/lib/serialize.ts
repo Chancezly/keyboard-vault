@@ -19,6 +19,18 @@ function cleanPart(part: Record<string, unknown>): Record<string, unknown> {
   return clean(part) as Record<string, unknown>
 }
 
+function mergeSection(
+  original: unknown,
+  replacement: Record<string, unknown>,
+  knownKeys: string[],
+): Record<string, unknown> {
+  const merged = original && typeof original === 'object' && !Array.isArray(original)
+    ? { ...(original as Record<string, unknown>) }
+    : {}
+  for (const key of knownKeys) delete merged[key]
+  return { ...merged, ...replacement }
+}
+
 export function serializeItem(item: CollectionItem): string {
   const isBuild = item.category === 'builds'
 
@@ -60,6 +72,7 @@ export function serializeItem(item: CollectionItem): string {
     : clean({
         status: item.status,
         condition: item.condition,
+        location: item.location,
         price: item.price,
         soldPrice: item.status === 'sold' ? item.soldPrice : undefined,
         currency: item.price != null || item.soldPrice != null ? item.currency : undefined,
@@ -114,22 +127,33 @@ export function serializeItem(item: CollectionItem): string {
     gallery: item.images.slice(1),
   })
 
-  const frontmatter: Record<string, unknown> = { identity }
-  if (Object.keys(specification).length) frontmatter.specification = specification
-  if (Object.keys(state).length) frontmatter.state = state
-  if (composition) frontmatter.composition = composition
-  if (Object.keys(relations).length) frontmatter.relations = relations
-  if (Object.keys(normalizedRating).length) frontmatter.rating = normalizedRating
-  if (Object.keys(tags).length) frontmatter.tags = tags
-  if (!isBuild && item.history.length) frontmatter.history = item.history
-  if (Object.keys(images).length) frontmatter.images = images
-  frontmatter.ai = {
-    summary: '',
-    suggestedTags: [],
-    recommendation: '',
-    model: '',
-    generatedAt: null,
+  const frontmatter: Record<string, unknown> = { ...(item.sourceFrontmatter ?? {}) }
+  frontmatter.identity = mergeSection(frontmatter.identity, identity, ['id', 'name', 'brand', 'maker', 'type', 'status'])
+  if (!isBuild) {
+    const mergedSpecification = mergeSection(frontmatter.specification, specification, [
+      'layout', 'formFactor', 'mount', 'plate', 'filling', 'pcbThickness', 'weight', 'material',
+      'profile', 'switchType', 'color', 'manufacturer', 'actuation', 'bottomOut', 'preTravel',
+      'bottomTravel', 'spring', 'lube', 'soundTendency', 'soundProfile', 'feelProfile',
+    ])
+    if (Object.keys(mergedSpecification).length) frontmatter.specification = mergedSpecification
+    else delete frontmatter.specification
+    const mergedState = mergeSection(frontmatter.state, state, [
+      'status', 'condition', 'location', 'inUse', 'price', 'soldPrice', 'currency', 'acquired', 'addedAt',
+    ])
+    if (Object.keys(mergedState).length) frontmatter.state = mergedState
+    else delete frontmatter.state
   }
+  if (composition) frontmatter.composition = mergeSection(frontmatter.composition, composition, ['keyboard', 'switches', 'keycaps'])
+  if (Object.keys(relations).length) frontmatter.relations = relations
+  else delete frontmatter.relations
+  if (Object.keys(normalizedRating).length) frontmatter.rating = mergeSection(frontmatter.rating, normalizedRating, ['score', 'overall', 'sound', 'feel', 'build', 'aesthetics', 'scale'])
+  else delete frontmatter.rating
+  if (Object.keys(tags).length) frontmatter.tags = tags
+  else delete frontmatter.tags
+  if (!isBuild && item.history.length) frontmatter.history = item.history
+  else if (!isBuild) delete frontmatter.history
+  if (Object.keys(images).length) frontmatter.images = mergeSection(frontmatter.images, images, ['hero', 'gallery'])
+  else delete frontmatter.images
 
   const yaml = stringify(frontmatter).trimEnd()
   return `---\n${yaml}\n---\n\n${item.content.trim()}\n`

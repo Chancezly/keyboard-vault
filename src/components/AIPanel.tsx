@@ -28,7 +28,8 @@ import {
   recommendUserPrompt,
   parseSuggestedTags,
 } from '../lib/ai/prompts'
-import { getApiKey, setApiKey, isConfigured } from '../lib/ai/config'
+import { getApiKey, getBaseUrl, setApiKey, isConfigured } from '../lib/ai/config'
+import { confirmCollectionNetworkUse, confirmImageNetworkUse } from '../lib/ai/networkConsent'
 import { DEFAULT_VISION_MODEL, getVisionModel, setVisionModel } from '../lib/ai/visionConfig'
 import { prepareImageDataUrl } from '../lib/ai/vision'
 import { identifyGearFromImage } from '../lib/ai/identify'
@@ -115,6 +116,7 @@ export function AIPanel({
         setError('请先配置 DeepSeek API Key')
         return
       }
+      if (!confirmCollectionNetworkUse(getBaseUrl())) return
 
       setLoading(true)
       setError(null)
@@ -151,6 +153,7 @@ export function AIPanel({
         return
       }
       if (!onSaveItem) return
+      if (!confirmImageNetworkUse(getBaseUrl())) return
 
       setLoading(true)
       setError(null)
@@ -357,7 +360,7 @@ export function AIPanel({
             </button>
           </div>
           <p className="text-[10px] text-text-tertiary leading-relaxed">
-            Key 仅保存在本浏览器 localStorage，不会上传到任何服务器。
+            Key 明文保存在本浏览器 localStorage。调用 AI 时，Key 与所需数据会直接发送到上方配置的 API 服务，不经过 KeyVault 自有后端。
           </p>
         </div>
       )}

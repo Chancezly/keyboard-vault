@@ -280,16 +280,6 @@ async function removeStaleItemMd(
   }
 }
 
-async function removeImageIfExists(handle: VaultHandle, fileName: string): Promise<void> {
-  if (!fileName) return
-  try {
-    const images = await handle.getDirectoryHandle('assets').then((a) => a.getDirectoryHandle('images'))
-    await images.removeEntry(fileName)
-  } catch {
-    // ignore
-  }
-}
-
 async function ensureDir(handle: VaultHandle, path: string[]): Promise<FileSystemDirectoryHandleLike> {
   let dir = handle
   for (const segment of path) {
@@ -326,32 +316,30 @@ function itemImageBasename(item: CollectionItem): string {
   return basenameFromFilePath(item.filePath) ?? itemDisplayBasename(item)
 }
 
-async function persistImages(handle: VaultHandle, item: CollectionItem): Promise<string[]> {
-  const ref = item.images[0]
-  if (!ref) return []
-
+async function persistImage(handle: VaultHandle, item: CollectionItem, ref: string, index: number): Promise<string | null> {
   const baseName = itemImageBasename(item)
+  const targetBase = index === 0 ? baseName : `${baseName}-gallery-${index}`
 
   if (ref.startsWith('data:')) {
     const decoded = decodeDataUrl(ref)
     if (!decoded) throw new Error('主图数据无效，无法写入本地')
-    const fileName = `${baseName}.${decoded.ext}`
+    const fileName = `${targetBase}.${decoded.ext}`
     await writeImageFile(handle, fileName, decoded.bytes)
-    return [fileName]
+    return fileName
   }
 
   if (ref.startsWith('blob:')) {
     const known = imageNameByUrl.get(ref)
-    if (known) return [known]
+    if (known) return known
     try {
       const res = await fetch(ref)
       if (!res.ok) throw new Error('blob 读取失败')
       const bytes = new Uint8Array(await res.arrayBuffer())
       const mime = res.headers.get('content-type') || 'image/jpeg'
       const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
-      const fileName = `${baseName}.${ext}`
+      const fileName = `${targetBase}.${ext}`
       await writeImageFile(handle, fileName, bytes)
-      return [fileName]
+      return fileName
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e)
       throw new Error(`主图 blob 无法写入 vault/assets/images/（${detail}）`)
@@ -359,31 +347,35 @@ async function persistImages(handle: VaultHandle, item: CollectionItem): Promise
   }
 
   if (imageNameByUrl.has(ref)) {
-    return [imageNameByUrl.get(ref)!]
+    return imageNameByUrl.get(ref)!
   }
 
   if (/^(https?:)?\/\//.test(ref)) {
     const fetched = await fetchRemoteImage(ref)
     if (fetched) {
-      const fileName = `${baseName}.${fetched.ext}`
+      const fileName = `${targetBase}.${fetched.ext}`
       await writeImageFile(handle, fileName, fetched.bytes)
-      return [fileName]
+      return fileName
     }
     throw new Error(`主图无法下载：${ref.split('?')[0].slice(-60)}`)
   }
 
   const fileName = ref.split('/').pop() ?? ref
   if (/\.(png|jpe?g|webp|gif|avif)$/i.test(fileName)) {
-    return [fileName]
+    return fileName
   }
-  return []
+  return null
 }
 
-function heroFileNameFromRef(ref: string | undefined): string | null {
-  if (!ref) return null
-  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return null
-  const name = ref.split('/').pop() ?? ref
-  return /\.(png|jpe?g|webp|gif|avif)$/i.test(name) ? name : null
+async function persistImages(handle: VaultHandle, item: CollectionItem): Promise<string[]> {
+  const refs = item.images.length ? item.images : item.image ? [item.image] : []
+  const persisted: string[] = []
+  for (let i = 0; i < refs.length; i++) {
+    const fileName = await persistImage(handle, item, refs[i], i)
+    if (!fileName) throw new Error(`第 ${i + 1} 张图片无法写入本地`)
+    persisted.push(fileName)
+  }
+  return persisted
 }
 
 async function writeImageFile(handle: VaultHandle, fileName: string, bytes: Uint8Array): Promise<void> {
@@ -400,19 +392,10 @@ async function writeImageFile(handle: VaultHandle, fileName: string, bytes: Uint
 export async function writeItem(handle: VaultHandle, item: CollectionItem): Promise<void> {
   const mdBase = itemImageBasename(item)
   const mdFileName = `${mdBase}.md`
-  const previousHero = heroFileNameFromRef(item.images[0])
-
-  await removeStaleItemMd(handle, item, mdFileName)
-
   const hadImage = !!item.images[0]
   const imageRefs = await persistImages(handle, item)
   if (hadImage && imageRefs.length === 0) {
     throw new Error('主图未能写入 vault/assets/images/，请重试')
-  }
-
-  const newHero = imageRefs[0]
-  if (previousHero && newHero && previousHero !== newHero) {
-    await removeImageIfExists(handle, previousHero)
   }
 
   const toSerialize: CollectionItem = { ...item, images: imageRefs, image: imageRefs[0] ?? '' }
@@ -421,6 +404,8 @@ export async function writeItem(handle: VaultHandle, item: CollectionItem): Prom
   const writable = await fh.createWritable()
   await writable.write(serializeItem(toSerialize))
   await writable.close()
+  // 新文件完整落盘后再清理旧名称，避免写入失败导致原 Markdown 丢失。
+  await removeStaleItemMd(handle, item, mdFileName)
 }
 
 export async function deleteItemFile(handle: VaultHandle, item: CollectionItem): Promise<void> {
@@ -454,8 +439,7 @@ export async function deleteItemFile(handle: VaultHandle, item: CollectionItem):
     }
   }
 
-  const hero = heroFileNameFromRef(item.images[0] ?? item.image)
-  if (hero) await removeImageIfExists(handle, hero)
+  // 图片可能被其他条目共享引用。数据安全优先，不在删除条目时自动清理图片。
 }
 
 // ---- Backup / migration (ZIP) ----
@@ -485,24 +469,55 @@ export async function exportVaultZip(handle: VaultHandle): Promise<Blob> {
 
 // 把 ZIP 内容写入当前已连接文件夹（同名覆盖），用于换设备快速恢复
 export async function importVaultZip(handle: VaultHandle, file: File): Promise<void> {
-  const zip = await JSZip.loadAsync(file)
+  const MAX_ARCHIVE_BYTES = 250 * 1024 * 1024
+  const MAX_UNPACKED_BYTES = 500 * 1024 * 1024
+  const MAX_FILE_BYTES = 40 * 1024 * 1024
+  const MAX_FILES = 2500
+  if (file.size > MAX_ARCHIVE_BYTES) throw new Error('ZIP 超过 250 MB，已拒绝导入')
+
+  const zip = await JSZip.loadAsync(await file.arrayBuffer())
   const files = Object.values(zip.files).filter((f) => !f.dir)
+  if (!files.length) throw new Error('ZIP 中没有可恢复的文件')
+  if (files.length > MAX_FILES) throw new Error(`ZIP 文件数量超过 ${MAX_FILES} 个，已拒绝导入`)
 
   // 若压缩包内容被包在同一个顶层文件夹里，则自动去掉这层
   let strip = ''
   const firsts = new Set(files.map((f) => f.name.split('/')[0]))
-  if (firsts.size === 1 && files.every((f) => f.name.includes('/'))) {
+  const vaultRoots = new Set(['keyboards', 'keycaps', 'switches', 'builds', 'assets', 'settings', 'ai'])
+  const onlyRoot = firsts.size === 1 ? [...firsts][0] : ''
+  if (onlyRoot && !vaultRoots.has(onlyRoot) && files.every((f) => f.name.includes('/'))) {
     strip = `${[...firsts][0]}/`
   }
 
+  const prepared: { parts: string[]; content: Blob }[] = []
+  let totalBytes = 0
   for (const entry of files) {
     const rel = strip && entry.name.startsWith(strip) ? entry.name.slice(strip.length) : entry.name
     const parts = rel.split('/').filter(Boolean)
     if (!parts.length) continue
+    if (
+      rel.startsWith('/') ||
+      parts.some((part) => part === '.' || part === '..' || /[\\:*?"<>|]/.test(part))
+    ) {
+      throw new Error(`ZIP 包含不安全路径：${entry.name}`)
+    }
+    const content = await entry.async('blob')
+    if (content.size > MAX_FILE_BYTES) throw new Error(`文件超过 40 MB：${entry.name}`)
+    totalBytes += content.size
+    if (totalBytes > MAX_UNPACKED_BYTES) throw new Error('ZIP 解压后超过 500 MB，已拒绝导入')
+    prepared.push({ parts, content })
+  }
+
+  // 所有内容先在内存中完成校验，确认无误后才清空当前 vault。
+  for await (const [name] of handle.entries()) {
+    await handle.removeEntry(name, { recursive: true })
+  }
+
+  for (const { parts: originalParts, content } of prepared) {
+    const parts = [...originalParts]
     const fileName = parts.pop() as string
     let dir = handle
     for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create: true })
-    const content = await entry.async('blob')
     const fh = await dir.getFileHandle(fileName, { create: true })
     const writable = await fh.createWritable()
     await writable.write(content)

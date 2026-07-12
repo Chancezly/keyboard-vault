@@ -188,7 +188,7 @@ export function Sidebar({
               <button
                 onClick={() => zipInputRef.current?.click()}
                 disabled={vaultBusy}
-                title="从 ZIP 恢复到当前文件夹（同名覆盖）"
+                title="从 ZIP 完整替换当前 vault（恢复前自动下载备份）"
                 className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Upload className="w-3.5 h-3.5" />

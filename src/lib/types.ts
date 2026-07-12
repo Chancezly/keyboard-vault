@@ -136,6 +136,8 @@ export interface CollectionItem {
   history: HistoryEvent[]
   content: string
   filePath: string
+  /** 原始 frontmatter，仅用于无损写回用户手工维护或未来版本新增的字段。 */
+  sourceFrontmatter?: Record<string, unknown>
 }
 
 export interface UserPreferences {
