@@ -11,6 +11,7 @@ import {
   Unplug,
   Download,
   Upload,
+  Heart,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
 import { CATEGORY_LABELS } from '../lib/types'
@@ -20,6 +21,8 @@ interface SidebarProps {
   onCategoryChange: (cat: ItemCategory | 'all') => void
   onOpenAI: () => void
   aiOpen: boolean
+  wishlistActive?: boolean
+  onWishlistClick?: () => void
   stats: {
     total: number
     inUse: number
@@ -51,6 +54,8 @@ export function Sidebar({
   onCategoryChange,
   onOpenAI,
   aiOpen,
+  wishlistActive,
+  onWishlistClick,
   stats,
   vaultSupported,
   vaultWritable,
@@ -119,10 +124,21 @@ export function Sidebar({
           <span>收藏中</span>
           <span className="text-accent tabular-nums">{stats.collection}</span>
         </div>
-        <div className="flex justify-between text-[11px] text-text-tertiary">
-          <span>心愿单</span>
+        <button
+          type="button"
+          onClick={onWishlistClick}
+          className={`w-full flex justify-between items-center text-[11px] rounded-lg px-1.5 -mx-1.5 py-1 transition-colors ${
+            wishlistActive
+              ? 'bg-amber-500/15 text-amber-300'
+              : 'text-text-tertiary hover:bg-white/[0.04]'
+          }`}
+        >
+          <span className="flex items-center gap-1.5">
+            <Heart className={`w-3 h-3 ${wishlistActive ? 'fill-current text-amber-400' : 'text-amber-400/80'}`} />
+            心愿单
+          </span>
           <span className="text-amber-400 tabular-nums">{stats.wishlist}</span>
-        </div>
+        </button>
         <div className="flex justify-between text-[11px] text-text-tertiary">
           <span>已售出</span>
           <span className="text-zinc-400 tabular-nums">{stats.sold}</span>

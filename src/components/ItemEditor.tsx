@@ -30,6 +30,7 @@ import {
   syncBuildRelations,
 } from '../lib/builds'
 import { downloadMarkdown } from '../lib/serialize'
+import { inferLayoutFromName } from '../lib/inferLayout'
 import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
 import { StarRating, formatRating } from './StarRating'
@@ -156,6 +157,18 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
 
   const set = <K extends keyof CollectionItem>(key: K, value: CollectionItem[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
+
+  /** 套件改名时：仅当配列为空才自动推断填充 */
+  const setKeyboardName = (name: string) => {
+    setDraft((d) => {
+      const next: CollectionItem = { ...d, name }
+      if (d.category === 'keyboards' && !d.layout?.trim()) {
+        const inferred = inferLayoutFromName(name)
+        if (inferred) next.layout = inferred
+      }
+      return next
+    })
+  }
 
   const setCategory = (c: ItemCategory) =>
     setDraft((d) => ({
@@ -315,6 +328,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
       tagGroups: draft.tags.length ? [{ group: '', values: draft.tags }] : [],
       rating: rd?.overall,
       ratingDetail: rd,
+      // 心愿单尚未购入，不保留购买时间
+      acquired: draft.status === 'wishlist' ? undefined : draft.acquired,
       soldPrice: draft.status === 'sold' ? draft.soldPrice : undefined,
     }
     onSave(normalized)
@@ -580,7 +595,9 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                   <Label>名称</Label>
                   <SuggestInput
                     value={draft.name}
-                    onChange={(v) => set('name', v)}
+                    onChange={(v) =>
+                      draft.category === 'keyboards' ? setKeyboardName(v) : set('name', v)
+                    }
                     placeholder={draft.category === 'switches' ? '例如 北极星轴' : '例如 Zoom65 V3'}
                     suffix={draft.category === 'switches' ? '轴' : undefined}
                   />
@@ -751,7 +768,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
             <>
           {/* Purchase date (keyboards) / price */}
           <div className="grid grid-cols-2 gap-4">
-            {draft.category === 'keyboards' && (
+            {draft.category === 'keyboards' && draft.status !== 'wishlist' && (
               <div>
                 <Label>购买时间</Label>
                 <input

@@ -91,8 +91,14 @@ export function applyCellValue(item: CollectionItem, col: DataTableColumn, value
     return { ...item, price: Number.isFinite(n) ? n : item.price, currency: item.currency ?? 'CNY' }
   }
   if (col.kind === 'date') {
+    if (item.status === 'wishlist') return { ...item, acquired: undefined }
     const trimmed = value.trim()
     return { ...item, acquired: trimmed || undefined }
+  }
+  if (col.field === 'status') {
+    const next = { ...item, status: value as CollectionItem['status'] }
+    if (value === 'wishlist') next.acquired = undefined
+    return next
   }
   if (col.field === 'name' || col.field === 'brand') {
     return { ...item, [col.field]: value }

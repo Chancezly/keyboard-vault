@@ -191,7 +191,8 @@ function resolveImage(ref: string, map: Map<string, string>): string {
   if (!ref) return ''
   if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return ref
   const name = ref.split('/').pop() ?? ref
-  return map.get(name) ?? diskImageByName.get(name) ?? ref
+  // 找不到本地资源时返回空，交给 UI 占位，避免裸文件名变成破图
+  return map.get(name) ?? diskImageByName.get(name) ?? ''
 }
 
 function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {

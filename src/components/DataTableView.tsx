@@ -38,6 +38,7 @@ function TableCell({
   onChange: (value: string) => void
 }) {
   const value = getCellDisplayValue(item, col)
+  const acquiredDisabled = col.kind === 'date' && item.status === 'wishlist'
 
   if (col.kind === 'status') {
     return (
@@ -52,6 +53,13 @@ function TableCell({
   }
 
   if (col.kind === 'date') {
+    if (acquiredDisabled) {
+      return (
+        <span className="block px-2 py-1.5 text-[12px] text-text-tertiary" title="心愿单无购买时间">
+          —
+        </span>
+      )
+    }
     return (
       <input
         type="date"

@@ -21,9 +21,10 @@ for (const [path, url] of Object.entries(imageModules)) {
 
 function resolveImage(ref: string): string {
   if (!ref) return ''
-  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:')) return ref
+  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return ref
   const name = ref.split('/').pop() ?? ref
-  return imageByName.get(name) ?? ref
+  // 找不到本地资源时返回空，交给 UI 占位，避免裸文件名变成破图
+  return imageByName.get(name) ?? ''
 }
 
 export function resolveBundledImageRef(ref: string): string {

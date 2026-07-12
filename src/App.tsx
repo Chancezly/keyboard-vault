@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ItemCard } from './components/ItemCard'
@@ -44,6 +44,19 @@ export default function App() {
   const [aiOpen, setAiOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // 手机端不提供表格视图
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    const sync = () => {
+      if (mq.matches) {
+        setViewMode((m) => (m === 'table' ? 'grid' : m))
+      }
+    }
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
 
   const stats = useMemo(() => getStats(items), [items])
   const allTags = useMemo(() => getAllTags(items), [items])
@@ -138,6 +151,8 @@ export default function App() {
         onCategoryChange={setCategory}
         onOpenAI={() => setAiOpen(!aiOpen)}
         aiOpen={aiOpen}
+        wishlistActive={status === 'wishlist'}
+        onWishlistClick={() => setStatus((s) => (s === 'wishlist' ? 'all' : 'wishlist'))}
         stats={stats}
         vaultSupported={vault.supported}
         vaultWritable={vaultWritable}
@@ -164,6 +179,7 @@ export default function App() {
             title={title}
             onNew={handleNew}
             readOnly={readOnly}
+            wishlistCount={stats.wishlist}
           />
 
           {readOnly && (
@@ -203,7 +219,15 @@ export default function App() {
                   </p>
                 </div>
               ) : filtered.length === 0 ? (
-                <EmptyState search={search} />
+                <EmptyState
+                  search={search}
+                  readOnly={readOnly}
+                  vaultSupported={vault.supported}
+                  onConnect={vault.connect}
+                  onNew={handleNew}
+                  onWishlist={() => setStatus('wishlist')}
+                  wishlistCount={stats.wishlist}
+                />
               ) : (
                 <DataTableView
                   items={filtered}
@@ -213,7 +237,15 @@ export default function App() {
                 />
               )
             ) : filtered.length === 0 ? (
-              <EmptyState search={search} />
+              <EmptyState
+                search={search}
+                readOnly={readOnly}
+                vaultSupported={vault.supported}
+                onConnect={vault.connect}
+                onNew={handleNew}
+                onWishlist={() => setStatus('wishlist')}
+                wishlistCount={stats.wishlist}
+              />
             ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-6">
                 {filtered.map((item) => (

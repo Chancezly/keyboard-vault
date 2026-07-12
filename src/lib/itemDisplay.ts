@@ -84,10 +84,12 @@ export function getStateFields(item: CollectionItem): DetailField[] {
     { label: '状态', value: STATUS_LABELS[item.status] ?? item.status },
   ]
 
-  if (item.category === 'keyboards') {
-    fields.push({ label: '购买时间', value: formatDetailValue(item.acquired) })
-  } else {
-    fields.push({ label: '购入时间', value: formatDetailValue(item.acquired) })
+  if (item.status !== 'wishlist') {
+    if (item.category === 'keyboards') {
+      fields.push({ label: '购买时间', value: formatDetailValue(item.acquired) })
+    } else {
+      fields.push({ label: '购入时间', value: formatDetailValue(item.acquired) })
+    }
   }
 
   fields.push({ label: '加入时间', value: formatDetailValue(item.addedAt) })

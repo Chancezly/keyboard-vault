@@ -102,7 +102,11 @@ export function resolveLocalImageRef(ref: string): string {
   if (!ref) return ''
   if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return ref
   const name = ref.split('/').pop() ?? ref
-  return urlCache.get(name) ?? resolveBundledImageRef(ref)
+  const fromCache = urlCache.get(name)
+  if (fromCache) return fromCache
+  const bundled = resolveBundledImageRef(ref)
+  // resolveBundledImageRef 找不到时已返回 ''
+  return bundled
 }
 
 /** 将主图存为本地文件名，返回更新后的 item */

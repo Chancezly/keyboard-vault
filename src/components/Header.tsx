@@ -1,4 +1,4 @@
-import { Search, LayoutGrid, List, Plus, Table2 } from 'lucide-react'
+import { Search, LayoutGrid, List, Plus, Table2, Heart } from 'lucide-react'
 import type { ItemStatus, SortOption } from '../lib/types'
 import { STATUS_LABELS, SORT_LABELS } from '../lib/types'
 import { Dropdown } from './Dropdown'
@@ -27,6 +27,7 @@ interface HeaderProps {
   title: string
   onNew: () => void
   readOnly?: boolean
+  wishlistCount?: number
 }
 
 export function Header({
@@ -42,7 +43,10 @@ export function Header({
   title,
   onNew,
   readOnly = false,
+  wishlistCount = 0,
 }: HeaderProps) {
+  const wishlistActive = status === 'wishlist'
+
   return (
     <header className="flex flex-col gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8 lg:pt-8 lg:pb-4">
       <div className="flex items-center justify-between gap-3 min-w-0">
@@ -78,6 +82,23 @@ export function Header({
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5 -mx-1 px-1 lg:mx-0 lg:px-0 lg:overflow-visible lg:pb-0">
+        <button
+          type="button"
+          onClick={() => onStatusChange(wishlistActive ? 'all' : 'wishlist')}
+          className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-medium border transition-all min-h-[40px] ${
+            wishlistActive
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              : 'bg-white/[0.04] text-text-tertiary border-white/[0.06] hover:text-text-secondary hover:bg-white/[0.06]'
+          }`}
+          title="心愿单"
+        >
+          <Heart className={`w-3.5 h-3.5 ${wishlistActive ? 'fill-current' : ''}`} />
+          心愿单
+          {wishlistCount > 0 ? (
+            <span className="tabular-nums text-[11px] opacity-80">{wishlistCount}</span>
+          ) : null}
+        </button>
+
         <Dropdown
           value={sortBy}
           onChange={(v) => onSortChange(v as SortOption)}
@@ -107,8 +128,8 @@ export function Header({
           </button>
           <button
             onClick={() => onViewModeChange('table')}
-            title="表格管理"
-            className={`hidden sm:block p-2.5 lg:p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white/10 text-text-primary' : 'text-text-tertiary hover:text-text-secondary'}`}
+            title="表格管理（桌面）"
+            className={`hidden lg:block p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white/10 text-text-primary' : 'text-text-tertiary hover:text-text-secondary'}`}
           >
             <Table2 className="w-4 h-4" />
           </button>
