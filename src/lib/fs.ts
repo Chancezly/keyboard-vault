@@ -263,6 +263,44 @@ function safeImageExtension(ext: string, fallback = 'jpg'): string {
 
 // ---- Read ----
 
+interface MarkdownCacheEntry {
+  size: number
+  lastModified: number
+  item: CollectionItem
+}
+
+const markdownCacheByVault = new WeakMap<object, Map<string, MarkdownCacheEntry>>()
+
+function markdownCacheFor(handle: VaultHandle): Map<string, MarkdownCacheEntry> {
+  let cache = markdownCacheByVault.get(handle)
+  if (!cache) {
+    cache = new Map()
+    markdownCacheByVault.set(handle, cache)
+  }
+  return cache
+}
+
+function cloneCachedItem(item: CollectionItem): CollectionItem {
+  return structuredClone(item)
+}
+
+function rememberMarkdownItem(
+  handle: VaultHandle,
+  filePath: string,
+  file: File,
+  item: CollectionItem,
+): void {
+  markdownCacheFor(handle).set(filePath, {
+    size: file.size,
+    lastModified: file.lastModified,
+    item: cloneCachedItem(item),
+  })
+}
+
+function invalidateMarkdownItem(handle: VaultHandle, filePath: string): void {
+  markdownCacheByVault.get(handle)?.delete(filePath)
+}
+
 // 串行化：StrictMode / 保存等会并发触发 readVault，串行执行保证图片缓存构建期间不被并发清空。
 let readVaultChain: Promise<unknown> = Promise.resolve()
 
@@ -284,6 +322,8 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
   nameByDataUrl = new Map()
 
   const items: CollectionItem[] = []
+  const markdownCache = markdownCacheFor(handle)
+  const seenMarkdown = new Set<string>()
   for (const category of CATEGORIES) {
     let dir: FileSystemDirectoryHandleLike
     try {
@@ -293,9 +333,22 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
     }
     for await (const [name, entry] of dir.entries()) {
       if (entry.kind !== 'file' || !name.endsWith('.md')) continue
+      const filePath = `${category}/${name}`
+      seenMarkdown.add(filePath)
       const file = await (entry as FileSystemFileHandleLike).getFile()
-      const raw = await file.text()
-      const item = parseItemMarkdown(raw, category, `${category}/${name}`)
+      const cached = markdownCache.get(filePath)
+      let item: CollectionItem
+      if (
+        cached &&
+        cached.size === file.size &&
+        cached.lastModified === file.lastModified
+      ) {
+        item = cloneCachedItem(cached.item)
+      } else {
+        const raw = await file.text()
+        item = parseItemMarkdown(raw, category, filePath)
+        rememberMarkdownItem(handle, filePath, file, item)
+      }
       const rawThumbnail = item.thumbnail
       // 保留原图文件名供详情/编辑按需读取，不在首页转为 data URL。
       item.image = item.images[0] ?? ''
@@ -307,6 +360,10 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
 
       items.push(item)
     }
+  }
+
+  for (const filePath of markdownCache.keys()) {
+    if (!seenMarkdown.has(filePath)) markdownCache.delete(filePath)
   }
 
   const byId = new Map(items.map((i) => [i.id, i]))
@@ -370,6 +427,7 @@ async function removePreviousItemMd(
   }
   try {
     await dir.removeEntry(previousFileName)
+    invalidateMarkdownItem(handle, `${previous.category}/${previousFileName}`)
   } catch {
     // 旧文件已不存在时无需中断保存。
   }
@@ -545,6 +603,12 @@ export async function writeItem(
   const writable = await fh.createWritable()
   await writable.write(serializeItem(toSerialize))
   await writable.close()
+  const savedItem = {
+    ...toSerialize,
+    filePath: `${item.category}/${mdFileName}`,
+  }
+  const writtenFile = await fh.getFile()
+  rememberMarkdownItem(handle, savedItem.filePath, writtenFile, savedItem)
   // 新文件完整落盘后再精确清理旧名称，避免写入失败导致原 Markdown 丢失。
   await removePreviousItemMd(handle, previous, item.category, mdFileName)
 
@@ -552,8 +616,7 @@ export async function writeItem(
     ? resolveImage(thumbnail) || await loadImageByName(handle, thumbnail, 'thumbnails') || undefined
     : undefined
   return {
-    ...toSerialize,
-    filePath: `${item.category}/${mdFileName}`,
+    ...savedItem,
     thumbnail: thumbnailUrl,
   }
 }
@@ -570,6 +633,8 @@ export async function deleteItemFile(handle: VaultHandle, item: CollectionItem):
   if (preferred) {
     try {
       await dir.removeEntry(`${preferred}.md`)
+      invalidateMarkdownItem(handle, `${item.category}/${preferred}.md`)
+      return
     } catch {
       // fall through to id scan
     }
@@ -583,6 +648,7 @@ export async function deleteItemFile(handle: VaultHandle, item: CollectionItem):
     if (parsed.id === item.id) {
       try {
         await dir.removeEntry(name)
+        invalidateMarkdownItem(handle, `${item.category}/${name}`)
       } catch {
         // ignore
       }
@@ -704,6 +770,7 @@ export async function generateMissingThumbnails(
         const writable = await fileHandle.createWritable()
         await writable.write(serializeItem({ ...item, thumbnail: thumbnailName }))
         await writable.close()
+        invalidateMarkdownItem(handle, filePath)
         result.generated++
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -781,6 +848,7 @@ export async function importVaultZip(handle: VaultHandle, file: File): Promise<v
   }
 
   // 所有内容先在内存中完成校验，确认无误后才清空当前 vault。
+  markdownCacheByVault.delete(handle)
   for await (const [name] of handle.entries()) {
     await handle.removeEntry(name, { recursive: true })
   }

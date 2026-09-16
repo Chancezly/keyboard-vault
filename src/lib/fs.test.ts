@@ -9,14 +9,27 @@ class MemoryFile {
   name: string
   data = new Blob()
   readCount = 0
+  textReadCount = 0
+  lastModified = 1
   constructor(name: string) { this.name = name }
   async getFile() {
     this.readCount++
-    return new File([this.data], this.name)
+    const file = new File([this.data], this.name, { lastModified: this.lastModified })
+    const readText = file.text.bind(file)
+    Object.defineProperty(file, 'text', {
+      value: async () => {
+        this.textReadCount++
+        return readText()
+      },
+    })
+    return file
   }
   async createWritable() {
     return {
-      write: async (data: Blob | string | BufferSource) => { this.data = data instanceof Blob ? data : new Blob([data as BlobPart]) },
+      write: async (data: Blob | string | BufferSource) => {
+        this.data = data instanceof Blob ? data : new Blob([data as BlobPart])
+        this.lastModified++
+      },
       close: async () => {},
     }
   }
@@ -81,6 +94,30 @@ describe('vault ZIP restore', () => {
 })
 
 describe('vault image persistence', () => {
+  it('reuses parsed Markdown until the file signature changes', async () => {
+    const root = new MemoryDirectory('vault')
+    const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
+    const item = createBlankItem('keyboards')
+    item.id = 'incremental-read'
+    item.name = 'Before'
+    item.filePath = 'keyboards/incremental-read.md'
+    item.thumbnail = 'data:image/webp;base64,BAUG'
+    const markdown = await keyboards.getFileHandle('incremental-read.md', { create: true })
+    markdown.data = new Blob([serializeItem(item)], { type: 'text/markdown' })
+
+    await readVault(root as unknown as VaultHandle)
+    const unchanged = await readVault(root as unknown as VaultHandle)
+    expect(markdown.textReadCount).toBe(1)
+    expect(unchanged[0].name).toBe('Before')
+
+    const writable = await markdown.createWritable()
+    await writable.write(serializeItem({ ...item, name: 'After' }))
+    await writable.close()
+    const changed = await readVault(root as unknown as VaultHandle)
+    expect(markdown.textReadCount).toBe(2)
+    expect(changed[0].name).toBe('After')
+  })
+
   it('loads collection metadata without reading original image files', async () => {
     const root = new MemoryDirectory('vault')
     const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
@@ -179,6 +216,10 @@ describe('vault image persistence', () => {
     expect(keyboards.children.has('new-name.md')).toBe(true)
     expect(unrelated.readCount).toBe(0)
     expect(saved.filePath).toBe('keyboards/new-name.md')
+
+    const savedFile = keyboards.children.get('new-name.md') as MemoryFile
+    await readVault(root as unknown as VaultHandle)
+    expect(savedFile.textReadCount).toBe(0)
   })
 
   it('backfills only missing thumbnails and is safe to run again', async () => {
