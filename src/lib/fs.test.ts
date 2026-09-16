@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { generateMissingThumbnails, importVaultZip, writeItem, type VaultHandle } from './fs'
+import { generateMissingThumbnails, importVaultZip, loadItemHero, readVault, writeItem, type VaultHandle } from './fs'
 import { serializeItem } from './serialize'
 import { createBlankItem } from './store'
 
@@ -8,8 +8,12 @@ class MemoryFile {
   kind = 'file' as const
   name: string
   data = new Blob()
+  readCount = 0
   constructor(name: string) { this.name = name }
-  async getFile() { return new File([this.data], this.name) }
+  async getFile() {
+    this.readCount++
+    return new File([this.data], this.name)
+  }
   async createWritable() {
     return {
       write: async (data: Blob | string | BufferSource) => { this.data = data instanceof Blob ? data : new Blob([data as BlobPart]) },
@@ -77,6 +81,44 @@ describe('vault ZIP restore', () => {
 })
 
 describe('vault image persistence', () => {
+  it('loads collection metadata without reading original image files', async () => {
+    const root = new MemoryDirectory('vault')
+    const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
+    const assets = await root.getDirectoryHandle('assets', { create: true })
+    const images = await assets.getDirectoryHandle('images', { create: true })
+    const hero = await images.getFileHandle('large-original.jpg', { create: true })
+    hero.data = new Blob([new Uint8Array(1024)], { type: 'image/jpeg' })
+
+    const item = createBlankItem('keyboards')
+    item.id = 'thumbnail-only-home'
+    item.name = 'Thumbnail Only Home'
+    item.filePath = 'keyboards/thumbnail-only-home.md'
+    item.image = 'large-original.jpg'
+    item.images = ['large-original.jpg']
+    item.thumbnail = 'data:image/webp;base64,BAUG'
+    const markdown = await keyboards.getFileHandle('thumbnail-only-home.md', { create: true })
+    markdown.data = new Blob([serializeItem(item)], { type: 'text/markdown' })
+
+    const loaded = await readVault(root as unknown as VaultHandle)
+
+    expect(hero.readCount).toBe(0)
+    expect(loaded[0]).toMatchObject({
+      image: 'large-original.jpg',
+      images: ['large-original.jpg'],
+      thumbnail: 'data:image/webp;base64,BAUG',
+    })
+
+    const detailed = await loadItemHero(root as unknown as VaultHandle, loaded[0], {
+      loadImage: async (_handle, ref, directory) => {
+        expect(ref).toBe('large-original.jpg')
+        expect(directory).toBe('images')
+        return 'data:image/jpeg;base64,AQID'
+      },
+    })
+    expect(detailed.image).toBe('data:image/jpeg;base64,AQID')
+    expect(detailed.images[0]).toBe('data:image/jpeg;base64,AQID')
+  })
+
   it('writes an uploaded thumbnail separately and records it in Markdown', async () => {
     const root = new MemoryDirectory('vault')
     const item = createBlankItem('keyboards')

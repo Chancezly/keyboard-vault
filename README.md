@@ -72,8 +72,8 @@ vault/
 ├── keycaps/                # 键帽
 ├── switches/               # 轴体
 ├── builds/                 # 搭配
-├── assets/images/          # 本地图片
-├── assets/thumbnails/      # 首页/列表缩略图（新生成优先使用 WebP）
+├── assets/images/          # 本地原图（打开详情时按需读取）
+├── assets/thumbnails/      # 首页/列表缩略图（首页仅读取这里）
 ├── settings/               # 用户偏好等
 └── ai/cache/               # AI 缓存（预留）
 ```

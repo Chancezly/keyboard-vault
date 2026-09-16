@@ -190,32 +190,6 @@ async function fileToDataUrl(file: File, name: string): Promise<string | null> {
   }
 }
 
-/** 读取主图与缩略图目录，填充文件名 -> data URL 缓存。 */
-async function loadAllImages(handle: VaultHandle): Promise<void> {
-  try {
-    const assets = await handle.getDirectoryHandle('assets')
-    for (const dirName of ['images', 'thumbnails']) {
-      try {
-        const images = await assets.getDirectoryHandle(dirName)
-        for await (const [name, entry] of images.entries()) {
-          if (entry.kind !== 'file') continue
-          try {
-            const file = await (entry as FileSystemFileHandleLike).getFile()
-            const dataUrl = await fileToDataUrl(file, name)
-            if (dataUrl) rememberImage(name, dataUrl)
-          } catch {
-            // 单张损坏/无法解码 → 跳过，不影响其它封面
-          }
-        }
-      } catch {
-        // 兼容尚未创建缩略图目录的旧 vault
-      }
-    }
-  } catch {
-    // 尚无 assets
-  }
-}
-
 /** 按文件名精确取图（缓存未命中时直接读盘，并做 NFC/NFD 与枚举兜底）。 */
 async function loadImageByName(
   handle: VaultHandle,
@@ -305,10 +279,9 @@ export function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
 }
 
 async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
-  // 重新构建图片缓存（data URL，无需吊销；旧字符串随引用消失自动 GC）
+  // 重新构建图片缓存。首页只按 Markdown 引用读取缩略图，不扫描或解码原图。
   imageByName = new Map()
   nameByDataUrl = new Map()
-  await loadAllImages(handle)
 
   const items: CollectionItem[] = []
   for (const category of CATEGORIES) {
@@ -323,20 +296,10 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
       const file = await (entry as FileSystemFileHandleLike).getFile()
       const raw = await file.text()
       const item = parseItemMarkdown(raw, category, `${category}/${name}`)
-      const rawHero = (raw.match(/hero:\s*(.+)/)?.[1] ?? '').trim()
-      item.images = item.images.map((ref) => resolveImage(ref))
-      item.image = item.images[0] ?? ''
       const rawThumbnail = item.thumbnail
+      // 保留原图文件名供详情/编辑按需读取，不在首页转为 data URL。
+      item.image = item.images[0] ?? ''
       item.thumbnail = resolveImage(rawThumbnail ?? '')
-
-      // 缓存没命中时（例如文件名规范化差异）按 hero 名再直接读盘一次
-      if (rawHero && !item.image) {
-        const url = await loadImageByName(handle, rawHero)
-        if (url) {
-          item.image = url
-          item.images = [url]
-        }
-      }
 
       if (rawThumbnail && !item.thumbnail) {
         item.thumbnail = await loadImageByName(handle, rawThumbnail, 'thumbnails') ?? undefined
@@ -356,6 +319,35 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
   }
 
   return hydrateBuildItems(items)
+}
+
+/** 打开详情/编辑时才读取单条主图；其余原图仍保留文件名，避免无谓内存开销。 */
+export async function loadItemHero(
+  handle: VaultHandle,
+  item: CollectionItem,
+  dependencies: {
+    loadImage?: (handle: VaultHandle, ref: string, directory: 'images') => Promise<string | null>
+  } = {},
+): Promise<CollectionItem> {
+  // 只还原原图引用；缩略图继续保持可直接显示的 data URL。
+  const stable = { ...stabilizeImageRefs(item), thumbnail: item.thumbnail }
+  const heroRef = stable.images[0]
+  if (!heroRef) return { ...stable, image: '' }
+
+  let resolved = ''
+  if (/^(data:|https?:|\/\/)/.test(heroRef)) {
+    resolved = heroRef
+  } else if (!heroRef.startsWith('blob:')) {
+    const loadImage = dependencies.loadImage ?? loadImageByName
+    resolved = await loadImage(handle, heroRef, 'images') ?? ''
+  }
+
+  const images = resolved ? [resolved, ...stable.images.slice(1)] : stable.images
+  return {
+    ...stable,
+    images,
+    image: resolved || stable.thumbnail || '',
+  }
 }
 
 async function removeStaleItemMd(

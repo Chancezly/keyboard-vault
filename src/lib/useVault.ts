@@ -16,6 +16,7 @@ import {
   importVaultZip,
   ensureVaultStructure,
   generateMissingThumbnails,
+  loadItemHero,
   stabilizeImageRefs,
   type VaultHandle,
 } from './fs'
@@ -43,6 +44,7 @@ export interface VaultState {
   exportZip: () => Promise<void>
   importZip: (file: File) => Promise<void>
   generateThumbnails: () => Promise<void>
+  loadHero: (item: CollectionItem) => Promise<CollectionItem>
 }
 
 export function useVault(): VaultState {
@@ -151,6 +153,11 @@ export function useVault(): VaultState {
     }
   }, [mode, handle, notifications])
 
+  const loadHero = useCallback(async (item: CollectionItem): Promise<CollectionItem> => {
+    if (mode === 'directory' && handle) return loadItemHero(handle, item)
+    return item
+  }, [mode, handle])
+
   const save = useCallback(
     async (item: CollectionItem): Promise<CollectionItem> => {
       if (mode === 'directory' && handle) {
@@ -165,7 +172,8 @@ export function useVault(): VaultState {
           await writeItem(handle, toSave)
           const loaded = await readVault(handle)
           setItems(loaded)
-          const saved = loaded.find((i) => i.id === item.id) ?? toSave
+          const savedSummary = loaded.find((i) => i.id === item.id) ?? toSave
+          const saved = await loadItemHero(handle, savedSummary)
           notifications.success('收藏已保存', saved.name)
           return saved
         } catch (e) {
@@ -307,5 +315,6 @@ export function useVault(): VaultState {
     exportZip,
     importZip,
     generateThumbnails,
+    loadHero,
   }
 }

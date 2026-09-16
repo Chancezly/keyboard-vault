@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ItemDetail } from './components/ItemDetail'
@@ -38,6 +38,8 @@ export default function App() {
     studioSuggestions,
   } = collection
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
+  const [selectedItemLoading, setSelectedItemLoading] = useState(false)
+  const selectedItemRequest = useRef(0)
   const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
@@ -79,6 +81,23 @@ export default function App() {
     if (readOnly) return
     const cat: ItemCategory = category === 'all' ? 'keyboards' : category
     setEditing({ item: createBlankItem(cat), isNew: true })
+  }
+
+  const handleSelectItem = async (item: CollectionItem) => {
+    const request = ++selectedItemRequest.current
+    // 原图读取期间先显示小图，不让裸文件名发起无效网络请求。
+    setSelectedItem({ ...item, image: item.thumbnail ?? '' })
+    setSelectedItemLoading(true)
+    try {
+      const loaded = await vault.loadHero(item)
+      if (selectedItemRequest.current === request) {
+        setSelectedItem((current) => (current?.id === item.id ? loaded : current))
+      }
+    } catch {
+      // 单张原图读取失败时保留缩略图，不影响详情其余信息。
+    } finally {
+      if (selectedItemRequest.current === request) setSelectedItemLoading(false)
+    }
   }
 
   const handleApplyTags = async (itemId: string, tags: string[]) => {
@@ -167,7 +186,7 @@ export default function App() {
               onConnect={vault.connect}
               onNew={handleNew}
               onShowWishlist={() => setStatus('wishlist')}
-              onSelectItem={setSelectedItem}
+              onSelectItem={(item) => void handleSelectItem(item)}
               onSave={vault.save}
             />
           </div>
@@ -217,8 +236,12 @@ export default function App() {
         <ItemDetail
           item={selectedItem}
           readOnly={readOnly}
-          onClose={() => setSelectedItem(null)}
-          onEdit={readOnly ? undefined : () => setEditing({ item: selectedItem, isNew: false })}
+          onClose={() => {
+            selectedItemRequest.current++
+            setSelectedItem(null)
+            setSelectedItemLoading(false)
+          }}
+          onEdit={readOnly || selectedItemLoading ? undefined : () => setEditing({ item: selectedItem, isNew: false })}
           onStatusChange={readOnly ? undefined : (next) => handleStatusChange(selectedItem, next)}
         />
       )}
