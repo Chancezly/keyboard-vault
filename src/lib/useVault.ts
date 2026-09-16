@@ -21,6 +21,7 @@ import {
 import { isVaultBrowserSupported } from './vaultCapabilities'
 import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
 import { assignItemFilePath, collectTakenBasenames } from './naming'
+import { useNotifications } from '../features/notifications/notification'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -33,7 +34,6 @@ export interface VaultState {
   writable: boolean
   dirName: string | null
   busy: boolean
-  error: string | null
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   save: (item: CollectionItem) => Promise<CollectionItem>
@@ -44,11 +44,11 @@ export interface VaultState {
 }
 
 export function useVault(): VaultState {
+  const notifications = useNotifications()
   const [items, setItems] = useState<CollectionItem[]>(() => getBundledItems())
   const [mode, setMode] = useState<VaultMode>('bundled')
   const [handle, setHandle] = useState<VaultHandle | null>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const supported = isVaultBrowserSupported()
   const writable = mode === 'directory'
 
@@ -61,23 +61,25 @@ export function useVault(): VaultState {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }, [])
 
-  const loadFromHandle = useCallback(async (h: VaultHandle) => {
+  const loadFromHandle = useCallback(async (h: VaultHandle): Promise<boolean> => {
     setBusy(true)
-    setError(null)
     try {
       await ensureVaultStructure(h)
       const loaded = await readVault(h)
       setHandle(h)
       setMode('directory')
       setItems(loaded)
+      return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      notifications.error('无法读取收藏库', message)
       setMode('bundled')
       setItems(getBundledItems())
+      return false
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [notifications])
 
   // Try to restore a previously connected directory on first load.
   useEffect(() => {
@@ -100,36 +102,57 @@ export function useVault(): VaultState {
   }, [supported, loadFromHandle])
 
   const connect = useCallback(async () => {
-    if (!supported) return
+    if (!supported) {
+      notifications.info('当前浏览器不支持文件夹连接', '请使用最新版 Chrome 或 Edge。')
+      return
+    }
     try {
       const h = await pickVaultDirectory()
-      if (h) await loadFromHandle(h)
+      if (h && (await loadFromHandle(h))) {
+        notifications.success('本地收藏库已连接', h.name)
+      }
     } catch (e) {
       // user cancelled picker → ignore AbortError
-      if (e instanceof Error && e.name !== 'AbortError') setError(e.message)
+      if (e instanceof Error && e.name !== 'AbortError') {
+        notifications.error('连接失败', e.message)
+      }
     }
-  }, [supported, loadFromHandle])
+  }, [supported, loadFromHandle, notifications])
 
   const disconnect = useCallback(async () => {
-    await forgetVaultDirectory()
-    setHandle(null)
-    setMode('bundled')
-    setItems(getBundledItems())
-  }, [])
+    try {
+      await forgetVaultDirectory()
+      setHandle(null)
+      setMode('bundled')
+      setItems(getBundledItems())
+      notifications.success('已断开本地收藏库', '本地文件没有被删除。')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      notifications.error('断开连接失败', message)
+    }
+  }, [notifications])
 
   const reload = useCallback(async () => {
-    if (mode === 'directory' && handle) {
-      setItems(await readVault(handle))
-    } else {
-      setItems(getBundledItems())
+    setBusy(true)
+    try {
+      if (mode === 'directory' && handle) {
+        setItems(await readVault(handle))
+      } else {
+        setItems(getBundledItems())
+      }
+      notifications.success('收藏库已重新载入')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      notifications.error('重新载入失败', message)
+    } finally {
+      setBusy(false)
     }
-  }, [mode, handle])
+  }, [mode, handle, notifications])
 
   const save = useCallback(
     async (item: CollectionItem): Promise<CollectionItem> => {
       if (mode === 'directory' && handle) {
         setBusy(true)
-        setError(null)
         try {
           // 必须在 readVault 之前把 blob: 还原成文件名，否则 revoke 后无法写主图
           const stabilized = stabilizeImageRefs(item)
@@ -140,10 +163,12 @@ export function useVault(): VaultState {
           await writeItem(handle, toSave)
           const loaded = await readVault(handle)
           setItems(loaded)
-          return loaded.find((i) => i.id === item.id) ?? toSave
+          const saved = loaded.find((i) => i.id === item.id) ?? toSave
+          notifications.success('收藏已保存', saved.name)
+          return saved
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
-          setError(message)
+          notifications.error('保存失败', message)
           throw e instanceof Error ? e : new Error(message)
         } finally {
           setBusy(false)
@@ -157,10 +182,12 @@ export function useVault(): VaultState {
         const saved = { ...withPath, ...withImage }
         upsertLocal(saved)
         setItems(getBundledItems())
-        return getBundledItems().find((i) => i.id === item.id) ?? saved
+        const result = getBundledItems().find((i) => i.id === item.id) ?? saved
+        notifications.success('收藏已保存', result.name)
+        return result
       }
     },
-    [mode, handle],
+    [mode, handle, notifications],
   )
 
   const remove = useCallback(
@@ -170,17 +197,20 @@ export function useVault(): VaultState {
         try {
           await deleteItemFile(handle, item)
           setItems(await readVault(handle))
+          notifications.success('收藏已删除', item.name)
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e))
+          const message = e instanceof Error ? e.message : String(e)
+          notifications.error('删除失败', message)
         } finally {
           setBusy(false)
         }
       } else {
         deleteLocal(item.id)
         setItems(getBundledItems())
+        notifications.success('收藏已删除', item.name)
       }
     },
-    [mode, handle],
+    [mode, handle, notifications],
   )
 
   const exportZip = useCallback(async () => {
@@ -190,12 +220,14 @@ export function useVault(): VaultState {
       const blob = await exportVaultZip(handle)
       const stamp = new Date().toISOString().slice(0, 10)
       downloadBackup(blob, `${handle.name || 'vault'}-backup-${stamp}.zip`)
+      notifications.success('备份已导出', `${handle.name || 'vault'} · ${stamp}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      notifications.error('导出备份失败', message)
     } finally {
       setBusy(false)
     }
-  }, [mode, handle, downloadBackup])
+  }, [mode, handle, downloadBackup, notifications])
 
   const importZip = useCallback(
     async (file: File) => {
@@ -205,20 +237,21 @@ export function useVault(): VaultState {
       )
       if (!confirmed) return
       setBusy(true)
-      setError(null)
       try {
         const before = await exportVaultZip(handle)
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
         downloadBackup(before, `${handle.name || 'vault'}-before-restore-${stamp}.zip`)
         await importVaultZip(handle, file)
         setItems(await readVault(handle))
+        notifications.success('收藏库恢复完成', '恢复前的原数据已自动下载备份。')
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        const message = e instanceof Error ? e.message : String(e)
+        notifications.error('恢复失败', message)
       } finally {
         setBusy(false)
       }
     },
-    [mode, handle, downloadBackup],
+    [mode, handle, downloadBackup, notifications],
   )
 
   return {
@@ -228,7 +261,6 @@ export function useVault(): VaultState {
     writable,
     dirName: handle?.name ?? null,
     busy,
-    error,
     connect,
     disconnect,
     save,

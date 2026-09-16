@@ -22,7 +22,8 @@ import {
 } from '../lib/itemDisplay'
 import { Dropdown } from './Dropdown'
 import type { DropdownOption } from './Dropdown'
-import { StarRating, formatRating } from './StarRating'
+import { StarRating } from './StarRating'
+import { formatRating } from '../lib/ratingFormat'
 import { CoverImage } from './CoverImage'
 
 const STATUS_OPTIONS: DropdownOption[] = (Object.keys(STATUS_LABELS) as ItemStatus[]).map((s) => ({

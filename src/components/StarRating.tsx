@@ -15,12 +15,6 @@ function starState(value: number, index: number): 'full' | 'half' | 'empty' {
   return 'empty'
 }
 
-/** 显示评分数字：整数不带小数，半星显示一位小数 */
-export function formatRating(value?: number): string {
-  if (value == null) return ''
-  return Number.isInteger(value) ? String(value) : value.toFixed(1)
-}
-
 export function StarRating({ value, onChange, size = 'md', readonly = false }: StarRatingProps) {
   const starClass = sizes[size]
   const current = value ?? 0

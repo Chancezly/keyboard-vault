@@ -32,9 +32,11 @@ import {
 } from '../lib/builds'
 import { downloadMarkdown } from '../lib/serialize'
 import { inferLayoutFromName } from '../lib/inferLayout'
-import { Dropdown, ComboSelect, fieldInputClass as inputClass } from './Dropdown'
+import { Dropdown, ComboSelect } from './Dropdown'
+import { fieldInputClass as inputClass } from './dropdownStyles'
 import type { DropdownOption } from './Dropdown'
-import { StarRating, formatRating } from './StarRating'
+import { StarRating } from './StarRating'
+import { formatRating } from '../lib/ratingFormat'
 
 const CATEGORY_OPTIONS: DropdownOption[] = (Object.keys(CATEGORY_LABELS) as ItemCategory[]).map((c) => ({
   value: c,
@@ -68,7 +70,6 @@ interface ItemEditorProps {
   allTags: string[]
   studioSuggestions: string[]
   inventoryItems: CollectionItem[]
-  vaultError?: string | null
   onSave: (item: CollectionItem) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -139,7 +140,7 @@ function SuggestInput({ value, onChange, placeholder, completions = [], suffix }
 }
 
 
-export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, vaultError, onSave, onDelete, onClose }: ItemEditorProps) {
+export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, onSave, onDelete, onClose }: ItemEditorProps) {
   const [draft, setDraft] = useState<CollectionItem>(() => {
     const base =
       item.category === 'switches' && !item.lube ? { ...item, lube: '厂润' } : { ...item }
@@ -606,9 +607,9 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                 />
               </div>
 
-              {(saveError || vaultError) && (
+              {saveError && (
                 <p className="text-[12px] text-red-300 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                  {saveError || vaultError}
+                  {saveError}
                 </p>
               )}
             </>

@@ -52,7 +52,7 @@ export default function App() {
       setEditing(null)
       setSelectedItem(saved)
     } catch {
-      // vault.error 已在 useVault 中设置，编辑弹窗保持打开便于重试
+      // 全局通知已显示错误，编辑弹窗保持打开便于重试。
     }
   }
 
@@ -67,8 +67,12 @@ export default function App() {
   const handleStatusChange = async (item: CollectionItem, next: ItemStatus) => {
     if (readOnly) return
     const updated = { ...item, status: next }
-    await vault.save(updated)
-    setSelectedItem(updated)
+    try {
+      const saved = await vault.save(updated)
+      setSelectedItem(saved)
+    } catch {
+      // useVault 已统一显示失败通知。
+    }
   }
 
   const handleNew = () => {
@@ -83,8 +87,12 @@ export default function App() {
     if (!item) return
     const merged = Array.from(new Set([...item.tags, ...tags]))
     const updated = { ...item, tags: merged, tagGroups: [{ group: '', values: merged }] }
-    await vault.save(updated)
-    if (selectedItem?.id === itemId) setSelectedItem(updated)
+    try {
+      const saved = await vault.save(updated)
+      if (selectedItem?.id === itemId) setSelectedItem(saved)
+    } catch {
+      // useVault 已统一显示失败通知。
+    }
   }
 
   const handleDisconnectConfirm = async () => {
@@ -142,14 +150,7 @@ export default function App() {
               vaultSupported={vault.supported}
               onConnect={vault.connect}
               busy={vault.busy}
-              error={vault.error}
             />
-          )}
-
-          {!readOnly && vault.error && (
-            <div className="mx-4 lg:mx-8 mt-3 lg:mt-4 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-[12px] text-red-300">
-              {vault.error}
-            </div>
           )}
 
           <div className="flex-1 overflow-y-auto px-4 lg:px-8 pb-4 lg:pb-8 min-h-0 overscroll-y-contain">
@@ -227,7 +228,6 @@ export default function App() {
           allTags={allTags}
           studioSuggestions={studioSuggestions}
           inventoryItems={items}
-          vaultError={vault.error}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FolderSync, AlertCircle, X } from 'lucide-react'
+import { FolderSync, X } from 'lucide-react'
 import { vaultBrowserHint } from '../lib/vaultCapabilities'
 
 const DISMISS_KEY = 'keyvault:readonly-banner-dismissed:v1'
@@ -16,10 +16,9 @@ interface ReadOnlyBannerProps {
   vaultSupported: boolean
   onConnect: () => void
   busy?: boolean
-  error?: string | null
 }
 
-export function ReadOnlyBanner({ vaultSupported, onConnect, busy, error }: ReadOnlyBannerProps) {
+export function ReadOnlyBanner({ vaultSupported, onConnect, busy }: ReadOnlyBannerProps) {
   const browserHint = vaultBrowserHint()
   const [dismissed, setDismissed] = useState(loadDismissed)
 
@@ -32,7 +31,7 @@ export function ReadOnlyBanner({ vaultSupported, onConnect, busy, error }: ReadO
     }
   }
 
-  if (dismissed && !error) {
+  if (dismissed) {
     return (
       <div className="mx-4 lg:mx-8 mt-3 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         <p className="flex-1 text-[12px] text-text-tertiary truncate">只读演示 · 连接文件夹后可编辑</p>
@@ -82,12 +81,6 @@ export function ReadOnlyBanner({ vaultSupported, onConnect, busy, error }: ReadO
           </button>
         )}
       </div>
-      {error && (
-        <div className="flex items-start gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-[12px] text-red-300">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{error}</span>
-        </div>
-      )}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react'
-import { formatRating, StarRating } from './StarRating'
+import { StarRating } from './StarRating'
+import { formatRating } from '../lib/ratingFormat'
 import type { CollectionItem } from '../lib/types'
 import { STATUS_LABELS, STATUS_BADGE_COLORS } from '../lib/types'
 import { BUILD_PART_META, getBuildComposition, getBuildDisplayName } from '../lib/builds'
