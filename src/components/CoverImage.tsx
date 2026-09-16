@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Keyboard } from 'lucide-react'
+import { releaseVaultImage, retainVaultImage } from '../lib/blobImageCache'
 
 interface CoverImageProps {
   src?: string
@@ -26,6 +27,12 @@ export function CoverImage({ src, alt, className = '', imgClassName = '' }: Cove
     setFailed(false)
   }, [src])
 
+  useEffect(() => {
+    if (!src?.startsWith('blob:')) return
+    retainVaultImage(src)
+    return () => releaseVaultImage(src)
+  }, [src])
+
   const showImg = isUsableSrc(src) && !failed
 
   return (
@@ -35,9 +42,7 @@ export function CoverImage({ src, alt, className = '', imgClassName = '' }: Cove
           src={src}
           alt={alt}
           className={`block w-full h-full object-cover ${imgClassName}`}
-          // 本地 vault 图片是 data URL。Chrome 在嵌套滚动容器中可能不会触发
-          // data URL 的原生懒加载，表现为编辑器有图、首页封面一直为空。
-          // 首页优先使用 640px 缩略图，立即加载不会重新读取原始大图。
+          // 首页使用 640px 缩略图，立即加载不会重新读取原始大图。
           loading="eager"
           decoding="async"
           onError={() => setFailed(true)}

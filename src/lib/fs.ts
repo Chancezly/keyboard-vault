@@ -6,6 +6,11 @@ import type { CollectionItem, ItemCategory, ItemRelation } from './types'
 import { itemDisplayBasename, basenameFromFilePath } from './naming'
 import { fetchImageBytes } from './fetchImage'
 import { createThumbnailDataUrl, heicToJpegBlob, isHeicLike, isHeicName } from './imageNormalize'
+import {
+  getCachedVaultImage,
+  suspendVaultImageEviction,
+  wasVaultImageRevoked,
+} from './blobImageCache'
 
 const CATEGORIES: ItemCategory[] = ['keyboards', 'keycaps', 'switches', 'builds']
 
@@ -128,14 +133,13 @@ export async function forgetVaultDirectory(): Promise<void> {
 
 // ---- Image handling ----
 //
-// 显示一律用 data URL（base64），不用 blob: 对象 URL：
-// blob URL 会被 revoke，在 StrictMode 重跑、保存、详情页残留旧引用等场景下被提前吊销，
-// 导致封面变黑。data URL 只是字符串，永不失效，随引用消失自动被 GC，彻底杜绝“变黑”。
+// 本地图片使用稳定 Blob URL 缓存：同一文件并发读取复用一个 URL，
+// React 组件通过引用计数保护正在显示的图片，仅在超出容量上限且无引用时延迟吊销。
 
-// 文件名（含 NFC/NFD 变体）-> 显示用 data URL
+// 文件名（含 NFC/NFD 变体）-> 显示用 URL
 let imageByName = new Map<string, string>()
-// data URL -> 磁盘文件名（保存时把显示引用还原成文件名，避免重复写入）
-let nameByDataUrl = new Map<string, string>()
+// 显示用 URL -> 磁盘文件名（保存时还原，避免重复写入）
+let nameByDisplayUrl = new Map<string, string>()
 
 /** 文件名的各种规范化写法，兼容 macOS(NFD) 与应用内(NFC) 差异 */
 function nameVariants(ref: string): string[] {
@@ -143,48 +147,67 @@ function nameVariants(ref: string): string[] {
   return Array.from(new Set([base, base.normalize('NFC'), base.normalize('NFD')]))
 }
 
-function rememberImage(name: string, dataUrl: string) {
-  for (const key of nameVariants(name)) imageByName.set(key, dataUrl)
-  nameByDataUrl.set(dataUrl, (name.split('/').pop() ?? name).trim())
+function rememberImage(name: string, displayUrl: string) {
+  for (const key of nameVariants(name)) imageByName.set(key, displayUrl)
+  nameByDisplayUrl.set(displayUrl, (name.split('/').pop() ?? name).trim())
 }
 
 function lookupImage(ref: string): string {
   for (const key of nameVariants(ref)) {
     const hit = imageByName.get(key)
+    if (hit && wasVaultImageRevoked(hit)) {
+      imageByName.delete(key)
+      nameByDisplayUrl.delete(hit)
+      continue
+    }
     if (hit) return hit
   }
   return ''
 }
 
-/** 保存前把显示用引用（data URL）还原成磁盘文件名，避免把整串 base64 当文件名写回。 */
+/** 保存前把 data/blob 显示引用还原成磁盘文件名，避免重复写入。 */
 export function stabilizeImageRefs(item: CollectionItem): CollectionItem {
   const refs = (item.images.length ? item.images : item.image ? [item.image] : []).map((ref) => {
-    if (ref.startsWith('data:') || ref.startsWith('blob:')) return nameByDataUrl.get(ref) ?? ref
+    if (ref.startsWith('data:') || ref.startsWith('blob:')) return nameByDisplayUrl.get(ref) ?? ref
     return ref
   })
   const thumbnail = item.thumbnail && (item.thumbnail.startsWith('data:') || item.thumbnail.startsWith('blob:'))
-    ? nameByDataUrl.get(item.thumbnail) ?? item.thumbnail
+    ? nameByDisplayUrl.get(item.thumbnail) ?? item.thumbnail
     : item.thumbnail
   return { ...item, images: refs, image: refs[0] ?? '', thumbnail }
 }
 
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'))
-    reader.readAsDataURL(blob)
-  })
+const vaultImageIds = new WeakMap<object, number>()
+let nextVaultImageId = 1
+
+function vaultImageId(handle: VaultHandle): number {
+  let id = vaultImageIds.get(handle)
+  if (!id) {
+    id = nextVaultImageId++
+    vaultImageIds.set(handle, id)
+  }
+  return id
 }
 
-/** 文件 -> 显示用 data URL：HEIC/HEIF 先转 JPEG；失败返回 null 交给占位。 */
-async function fileToDataUrl(file: File, name: string): Promise<string | null> {
+/** 文件 -> 稳定显示 URL：HEIC/HEIF 先转 JPEG；失败返回 null 交给占位。 */
+async function fileToDisplayUrl(
+  handle: VaultHandle,
+  file: File,
+  name: string,
+  directory: 'images' | 'thumbnails',
+): Promise<string | null> {
   try {
-    if (isHeicName(name) || isHeicLike(file, name)) {
-      const jpeg = await heicToJpegBlob(file)
-      return await blobToDataUrl(jpeg)
-    }
-    return await blobToDataUrl(file)
+    const heic = isHeicName(name) || isHeicLike(file, name)
+    const normalizedName = (name.split('/').pop() ?? name).normalize('NFC')
+    const cacheKey = [
+      vaultImageId(handle),
+      directory,
+      normalizedName,
+      file.size,
+      file.lastModified,
+      heic ? 'jpeg' : file.type,
+    ].join(':')
+    return await getCachedVaultImage(cacheKey, async () => heic ? heicToJpegBlob(file) : file)
   } catch {
     return null
   }
@@ -209,10 +232,10 @@ async function loadImageByName(
       const file = await (images.getFileHandle(candidate) as Promise<FileSystemFileHandleLike>).then((fh) =>
         fh.getFile(),
       )
-      const dataUrl = await fileToDataUrl(file, candidate)
-      if (dataUrl) {
-        rememberImage(candidate, dataUrl)
-        return dataUrl
+      const displayUrl = await fileToDisplayUrl(handle, file, candidate, directory)
+      if (displayUrl) {
+        rememberImage(candidate, displayUrl)
+        return displayUrl
       }
     } catch {
       // 试下一个写法
@@ -225,10 +248,10 @@ async function loadImageByName(
       if (entry.kind !== 'file') continue
       if (entryName.trim().normalize('NFC') !== want) continue
       const file = await (entry as FileSystemFileHandleLike).getFile()
-      const dataUrl = await fileToDataUrl(file, entryName)
-      if (dataUrl) {
-        rememberImage(entryName, dataUrl)
-        return dataUrl
+      const displayUrl = await fileToDisplayUrl(handle, file, entryName, directory)
+      if (displayUrl) {
+        rememberImage(entryName, displayUrl)
+        return displayUrl
       }
     }
   } catch {
@@ -305,9 +328,17 @@ function invalidateMarkdownItem(handle: VaultHandle, filePath: string): void {
 let readVaultChain: Promise<unknown> = Promise.resolve()
 
 export function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
+  const readOnce = async () => {
+    const resumeEviction = suspendVaultImageEviction()
+    try {
+      return await doReadVault(handle)
+    } finally {
+      resumeEviction()
+    }
+  }
   const run = readVaultChain.then(
-    () => doReadVault(handle),
-    () => doReadVault(handle),
+    readOnce,
+    readOnce,
   )
   readVaultChain = run.then(
     () => undefined,
@@ -319,7 +350,7 @@ export function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
 async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
   // 重新构建图片缓存。首页只按 Markdown 引用读取缩略图，不扫描或解码原图。
   imageByName = new Map()
-  nameByDataUrl = new Map()
+  nameByDisplayUrl = new Map()
 
   const items: CollectionItem[] = []
   const markdownCache = markdownCacheFor(handle)
@@ -350,7 +381,7 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
         rememberMarkdownItem(handle, filePath, file, item)
       }
       const rawThumbnail = item.thumbnail
-      // 保留原图文件名供详情/编辑按需读取，不在首页转为 data URL。
+      // 保留原图文件名供详情/编辑按需读取，不在首页生成显示 URL。
       item.image = item.images[0] ?? ''
       item.thumbnail = resolveImage(rawThumbnail ?? '')
 
@@ -386,7 +417,7 @@ export async function loadItemHero(
     loadImage?: (handle: VaultHandle, ref: string, directory: 'images') => Promise<string | null>
   } = {},
 ): Promise<CollectionItem> {
-  // 只还原原图引用；缩略图继续保持可直接显示的 data URL。
+  // 只还原原图引用；缩略图继续保持可直接显示的 URL。
   const stable = { ...stabilizeImageRefs(item), thumbnail: item.thumbnail }
   const heroRef = stable.images[0]
   if (!heroRef) return { ...stable, image: '' }
@@ -474,8 +505,8 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
   const baseName = itemImageBasename(item)
   const targetBase = index === 0 ? baseName : `${baseName}-gallery-${index}`
 
-  // 显示引用（data URL）若能还原成已有文件名，直接复用，避免重复写盘
-  const knownName = nameByDataUrl.get(ref)
+  // 显示 URL 若能还原成已有文件名，直接复用，避免重复写盘
+  const knownName = nameByDisplayUrl.get(ref)
   if (knownName) return knownName
 
   if (ref.startsWith('data:')) {
@@ -542,11 +573,11 @@ async function writeImageFile(
   const writable = await fh.createWritable()
   await writable.write(new Blob([bytes as unknown as BlobPart]))
   await writable.close()
-  // 写盘后立即缓存 data URL，保存后无需等下一次 readVault 也能显示
+  // 写盘后立即缓存显示 URL，保存后无需等下一次 readVault 也能显示
   try {
     const file = await fh.getFile()
-    const dataUrl = await fileToDataUrl(file, fileName)
-    if (dataUrl) rememberImage(fileName, dataUrl)
+    const displayUrl = await fileToDisplayUrl(handle, file, fileName, directory)
+    if (displayUrl) rememberImage(fileName, displayUrl)
   } catch {
     // 缓存失败无碍，下次 readVault 会重建
   }
@@ -558,7 +589,7 @@ async function persistThumbnail(
   ref: string,
 ): Promise<string | undefined> {
   if (!ref) return undefined
-  const knownName = nameByDataUrl.get(ref)
+  const knownName = nameByDisplayUrl.get(ref)
   if (knownName) return knownName
 
   if (ref.startsWith('data:')) {
@@ -710,7 +741,7 @@ async function loadThumbnailSource(handle: VaultHandle, ref: string): Promise<st
   if (!ref) return null
   if (/^(data:|https?:|\/\/)/.test(ref)) return ref
   const file = await findFileByName(handle, ref, 'images')
-  return file ? fileToDataUrl(file, file.name) : null
+  return file ? fileToDisplayUrl(handle, file, file.name, 'images') : null
 }
 
 async function thumbnailReferenceExists(handle: VaultHandle, ref: string): Promise<boolean> {

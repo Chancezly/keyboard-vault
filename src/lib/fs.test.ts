@@ -94,6 +94,28 @@ describe('vault ZIP restore', () => {
 })
 
 describe('vault image persistence', () => {
+  it('reuses one stable Blob URL for an unchanged local thumbnail', async () => {
+    const root = new MemoryDirectory('vault')
+    const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
+    const assets = await root.getDirectoryHandle('assets', { create: true })
+    const thumbnails = await assets.getDirectoryHandle('thumbnails', { create: true })
+    const thumbnail = await thumbnails.getFileHandle('stable-thumb.webp', { create: true })
+    thumbnail.data = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' })
+    const item = createBlankItem('keyboards')
+    item.id = 'stable-blob-thumbnail'
+    item.name = 'Stable Blob Thumbnail'
+    item.filePath = 'keyboards/stable-blob-thumbnail.md'
+    item.thumbnail = 'stable-thumb.webp'
+    const markdown = await keyboards.getFileHandle('stable-blob-thumbnail.md', { create: true })
+    markdown.data = new Blob([serializeItem(item)], { type: 'text/markdown' })
+
+    const first = await readVault(root as unknown as VaultHandle)
+    const second = await readVault(root as unknown as VaultHandle)
+
+    expect(first[0].thumbnail).toMatch(/^blob:/)
+    expect(second[0].thumbnail).toBe(first[0].thumbnail)
+  })
+
   it('reuses parsed Markdown until the file signature changes', async () => {
     const root = new MemoryDirectory('vault')
     const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
