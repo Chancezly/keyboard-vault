@@ -350,29 +350,28 @@ export async function loadItemHero(
   }
 }
 
-async function removeStaleItemMd(
+async function removePreviousItemMd(
   handle: VaultHandle,
-  item: CollectionItem,
-  keepFileName: string,
+  previous: Pick<CollectionItem, 'category' | 'filePath'> | undefined,
+  nextCategory: ItemCategory,
+  nextFileName: string,
 ): Promise<void> {
+  if (!previous) return
+  const previousBase = basenameFromFilePath(previous.filePath)
+  if (!previousBase) return
+  const previousFileName = `${previousBase}.md`
+  if (previous.category === nextCategory && previousFileName === nextFileName) return
+
   let dir: FileSystemDirectoryHandleLike
   try {
-    dir = await handle.getDirectoryHandle(item.category)
+    dir = await handle.getDirectoryHandle(previous.category)
   } catch {
     return
   }
-  for await (const [name, entry] of dir.entries()) {
-    if (entry.kind !== 'file' || !name.endsWith('.md') || name === keepFileName) continue
-    const file = await (entry as FileSystemFileHandleLike).getFile()
-    const raw = await file.text()
-    const parsed = parseItemMarkdown(raw, item.category, `${item.category}/${name}`)
-    if (parsed.id === item.id) {
-      try {
-        await dir.removeEntry(name)
-      } catch {
-        // ignore
-      }
-    }
+  try {
+    await dir.removeEntry(previousFileName)
+  } catch {
+    // 旧文件已不存在时无需中断保存。
   }
 }
 
@@ -517,7 +516,11 @@ async function persistThumbnail(
   return undefined
 }
 
-export async function writeItem(handle: VaultHandle, item: CollectionItem): Promise<void> {
+export async function writeItem(
+  handle: VaultHandle,
+  item: CollectionItem,
+  previous?: Pick<CollectionItem, 'category' | 'filePath'>,
+): Promise<CollectionItem> {
   const mdBase = itemImageBasename(item)
   const mdFileName = `${mdBase}.md`
   const hadImage = !!item.images[0]
@@ -542,8 +545,17 @@ export async function writeItem(handle: VaultHandle, item: CollectionItem): Prom
   const writable = await fh.createWritable()
   await writable.write(serializeItem(toSerialize))
   await writable.close()
-  // 新文件完整落盘后再清理旧名称，避免写入失败导致原 Markdown 丢失。
-  await removeStaleItemMd(handle, item, mdFileName)
+  // 新文件完整落盘后再精确清理旧名称，避免写入失败导致原 Markdown 丢失。
+  await removePreviousItemMd(handle, previous, item.category, mdFileName)
+
+  const thumbnailUrl = thumbnail
+    ? resolveImage(thumbnail) || await loadImageByName(handle, thumbnail, 'thumbnails') || undefined
+    : undefined
+  return {
+    ...toSerialize,
+    filePath: `${item.category}/${mdFileName}`,
+    thumbnail: thumbnailUrl,
+  }
 }
 
 export async function deleteItemFile(handle: VaultHandle, item: CollectionItem): Promise<void> {

@@ -23,6 +23,7 @@ import {
 import { isVaultBrowserSupported } from './vaultCapabilities'
 import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
 import { assignItemFilePath, collectTakenBasenames } from './naming'
+import { hydrateBuildItems } from './builds'
 import { useNotifications } from '../features/notifications/notification'
 
 export type VaultMode = 'bundled' | 'directory'
@@ -45,6 +46,23 @@ export interface VaultState {
   importZip: (file: File) => Promise<void>
   generateThumbnails: () => Promise<void>
   loadHero: (item: CollectionItem) => Promise<CollectionItem>
+}
+
+function upsertCollectionItem(items: CollectionItem[], saved: CollectionItem): CollectionItem[] {
+  const exists = items.some((item) => item.id === saved.id)
+  const merged = exists
+    ? items.map((item) => (item.id === saved.id ? saved : item))
+    : [...items, saved]
+  const byId = new Map(merged.map((item) => [item.id, item]))
+  return hydrateBuildItems(merged.map((item) => ({
+    ...item,
+    relations: item.relations.map((relation) => {
+      const target = byId.get(relation.ref)
+      return target
+        ? { ...relation, name: target.name, category: target.category }
+        : relation
+    }),
+  })))
 }
 
 export function useVault(): VaultState {
@@ -163,16 +181,13 @@ export function useVault(): VaultState {
       if (mode === 'directory' && handle) {
         setBusy(true)
         try {
-          // 必须在 readVault 之前把 blob: 还原成文件名，否则 revoke 后无法写主图
+          // 保存前把显示用 data/blob URL 还原成文件名，避免重复写图。
           const stabilized = stabilizeImageRefs(item)
-          const taken = collectTakenBasenames(
-            (await readVault(handle)).filter((i) => i.id !== stabilized.id),
-          )
+          const previous = items.find((current) => current.id === stabilized.id)
+          const taken = collectTakenBasenames(items, stabilized.id)
           const toSave = assignItemFilePath(stabilized, taken)
-          await writeItem(handle, toSave)
-          const loaded = await readVault(handle)
-          setItems(loaded)
-          const savedSummary = loaded.find((i) => i.id === item.id) ?? toSave
+          const savedSummary = await writeItem(handle, toSave, previous)
+          setItems((current) => upsertCollectionItem(current, savedSummary))
           const saved = await loadItemHero(handle, savedSummary)
           notifications.success('收藏已保存', saved.name)
           return saved
@@ -197,7 +212,7 @@ export function useVault(): VaultState {
         return result
       }
     },
-    [mode, handle, notifications],
+    [mode, handle, items, notifications],
   )
 
   const remove = useCallback(

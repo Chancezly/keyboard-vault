@@ -158,6 +158,29 @@ describe('vault image persistence', () => {
     )
   })
 
+  it('updates one item and removes its previous Markdown without scanning unrelated files', async () => {
+    const root = new MemoryDirectory('vault')
+    const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
+    const unrelated = await keyboards.getFileHandle('unrelated.md', { create: true })
+    unrelated.data = new Blob(['unrelated'], { type: 'text/markdown' })
+    const previousFile = await keyboards.getFileHandle('old-name.md', { create: true })
+    previousFile.data = new Blob(['old'], { type: 'text/markdown' })
+
+    const item = createBlankItem('keyboards')
+    item.id = 'incremental-save'
+    item.name = 'New Name'
+    item.filePath = 'keyboards/new-name.md'
+    const saved = await writeItem(root as unknown as VaultHandle, item, {
+      category: 'keyboards',
+      filePath: 'keyboards/old-name.md',
+    })
+
+    expect(keyboards.children.has('old-name.md')).toBe(false)
+    expect(keyboards.children.has('new-name.md')).toBe(true)
+    expect(unrelated.readCount).toBe(0)
+    expect(saved.filePath).toBe('keyboards/new-name.md')
+  })
+
   it('backfills only missing thumbnails and is safe to run again', async () => {
     const root = new MemoryDirectory('vault')
     const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
