@@ -56,55 +56,10 @@ export async function visionCompletion(
   return content
 }
 
-/** 压缩大图后再识别，减少 token 消耗 */
+import { normalizeImageFile } from '../imageNormalize'
+
+/** 压缩大图后再识别，减少 token 消耗（含 HEIC → JPEG） */
 export async function prepareImageDataUrl(file: File, maxEdge = 1280): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('请上传图片文件')
-
-  const blob = file.size <= 900_000 && file.type.startsWith('image/jpeg')
-    ? file
-    : await compressImage(file, maxEdge)
-
-  return blobToDataUrl(blob)
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
-
-function compressImage(file: File, maxEdge: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      let { width, height } = img
-      const scale = Math.min(1, maxEdge / Math.max(width, height))
-      width = Math.round(width * scale)
-      height = Math.round(height * scale)
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        reject(new Error('无法处理图片'))
-        return
-      }
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error('图片压缩失败'))),
-        'image/jpeg',
-        0.88,
-      )
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('图片加载失败'))
-    }
-    img.src = url
-  })
+  const normalized = await normalizeImageFile(file, { maxEdge, quality: 0.88 })
+  return normalized.dataUrl
 }

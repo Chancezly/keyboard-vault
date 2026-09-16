@@ -5,6 +5,7 @@ import { serializeItem } from './serialize'
 import type { CollectionItem, ItemCategory, ItemRelation } from './types'
 import { itemDisplayBasename, basenameFromFilePath } from './naming'
 import { fetchImageBytes } from './fetchImage'
+import { createThumbnailDataUrl, heicToJpegBlob, isHeicLike, isHeicName } from './imageNormalize'
 
 const CATEGORIES: ItemCategory[] = ['keyboards', 'keycaps', 'switches', 'builds']
 
@@ -126,73 +127,148 @@ export async function forgetVaultDirectory(): Promise<void> {
 }
 
 // ---- Image handling ----
+//
+// 显示一律用 data URL（base64），不用 blob: 对象 URL：
+// blob URL 会被 revoke，在 StrictMode 重跑、保存、详情页残留旧引用等场景下被提前吊销，
+// 导致封面变黑。data URL 只是字符串，永不失效，随引用消失自动被 GC，彻底杜绝“变黑”。
 
-let imageObjectUrls: string[] = []
-// 反查表：显示用的 blob: URL -> 原始文件名，保存时用它还原引用，避免把 URL 当成文件名写回
-let imageNameByUrl = new Map<string, string>()
-// 文件名 -> blob URL，跨 readVault 刷新保留已解析的本地图
-let diskImageByName = new Map<string, string>()
+// 文件名（含 NFC/NFD 变体）-> 显示用 data URL
+let imageByName = new Map<string, string>()
+// data URL -> 磁盘文件名（保存时把显示引用还原成文件名，避免重复写入）
+let nameByDataUrl = new Map<string, string>()
 
-function trackImageUrl(name: string, url: string) {
-  diskImageByName.set(name, url)
-  imageNameByUrl.set(url, name)
-  imageObjectUrls.push(url)
+/** 文件名的各种规范化写法，兼容 macOS(NFD) 与应用内(NFC) 差异 */
+function nameVariants(ref: string): string[] {
+  const base = (ref.split('/').pop() ?? ref).trim()
+  return Array.from(new Set([base, base.normalize('NFC'), base.normalize('NFD')]))
 }
 
-/** 把仍可追踪的 blob: 主图还原成磁盘文件名，避免 readVault 吊销 URL 后无法保存 */
+function rememberImage(name: string, dataUrl: string) {
+  for (const key of nameVariants(name)) imageByName.set(key, dataUrl)
+  nameByDataUrl.set(dataUrl, (name.split('/').pop() ?? name).trim())
+}
+
+function lookupImage(ref: string): string {
+  for (const key of nameVariants(ref)) {
+    const hit = imageByName.get(key)
+    if (hit) return hit
+  }
+  return ''
+}
+
+/** 保存前把显示用引用（data URL）还原成磁盘文件名，避免把整串 base64 当文件名写回。 */
 export function stabilizeImageRefs(item: CollectionItem): CollectionItem {
   const refs = (item.images.length ? item.images : item.image ? [item.image] : []).map((ref) => {
-    if (!ref.startsWith('blob:')) return ref
-    return imageNameByUrl.get(ref) ?? ref
+    if (ref.startsWith('data:') || ref.startsWith('blob:')) return nameByDataUrl.get(ref) ?? ref
+    return ref
   })
-  return { ...item, images: refs, image: refs[0] ?? '' }
+  const thumbnail = item.thumbnail && (item.thumbnail.startsWith('data:') || item.thumbnail.startsWith('blob:'))
+    ? nameByDataUrl.get(item.thumbnail) ?? item.thumbnail
+    : item.thumbnail
+  return { ...item, images: refs, image: refs[0] ?? '', thumbnail }
 }
 
-function revokeImageUrls() {
-  imageObjectUrls.forEach((u) => URL.revokeObjectURL(u))
-  imageObjectUrls = []
-  imageNameByUrl = new Map()
-  diskImageByName = new Map()
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'))
+    reader.readAsDataURL(blob)
+  })
 }
 
-async function readImageMap(handle: VaultHandle): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
+/** 文件 -> 显示用 data URL：HEIC/HEIF 先转 JPEG；失败返回 null 交给占位。 */
+async function fileToDataUrl(file: File, name: string): Promise<string | null> {
   try {
-    const assets = await handle.getDirectoryHandle('assets')
-    const images = await assets.getDirectoryHandle('images')
-    for await (const [name, entry] of images.entries()) {
-      if (entry.kind !== 'file') continue
-      const file = await (entry as FileSystemFileHandleLike).getFile()
-      const url = URL.createObjectURL(file)
-      map.set(name, url)
-      trackImageUrl(name, url)
+    if (isHeicName(name) || isHeicLike(file, name)) {
+      const jpeg = await heicToJpegBlob(file)
+      return await blobToDataUrl(jpeg)
     }
-  } catch {
-    // no assets/images yet
-  }
-  return map
-}
-
-async function loadImageByName(handle: VaultHandle, name: string): Promise<string | null> {
-  const cached = diskImageByName.get(name)
-  if (cached) return cached
-  try {
-    const images = await handle.getDirectoryHandle('assets').then((a) => a.getDirectoryHandle('images'))
-    const file = await (images.getFileHandle(name) as Promise<FileSystemFileHandleLike>).then((fh) => fh.getFile())
-    const url = URL.createObjectURL(file)
-    trackImageUrl(name, url)
-    return url
+    return await blobToDataUrl(file)
   } catch {
     return null
   }
 }
 
-function resolveImage(ref: string, map: Map<string, string>): string {
+/** 读取主图与缩略图目录，填充文件名 -> data URL 缓存。 */
+async function loadAllImages(handle: VaultHandle): Promise<void> {
+  try {
+    const assets = await handle.getDirectoryHandle('assets')
+    for (const dirName of ['images', 'thumbnails']) {
+      try {
+        const images = await assets.getDirectoryHandle(dirName)
+        for await (const [name, entry] of images.entries()) {
+          if (entry.kind !== 'file') continue
+          try {
+            const file = await (entry as FileSystemFileHandleLike).getFile()
+            const dataUrl = await fileToDataUrl(file, name)
+            if (dataUrl) rememberImage(name, dataUrl)
+          } catch {
+            // 单张损坏/无法解码 → 跳过，不影响其它封面
+          }
+        }
+      } catch {
+        // 兼容尚未创建缩略图目录的旧 vault
+      }
+    }
+  } catch {
+    // 尚无 assets
+  }
+}
+
+/** 按文件名精确取图（缓存未命中时直接读盘，并做 NFC/NFD 与枚举兜底）。 */
+async function loadImageByName(
+  handle: VaultHandle,
+  name: string,
+  directory: 'images' | 'thumbnails' = 'images',
+): Promise<string | null> {
+  const cached = lookupImage(name)
+  if (cached) return cached
+  let images: FileSystemDirectoryHandleLike
+  try {
+    images = await handle.getDirectoryHandle('assets').then((a) => a.getDirectoryHandle(directory))
+  } catch {
+    return null
+  }
+  for (const candidate of nameVariants(name)) {
+    try {
+      const file = await (images.getFileHandle(candidate) as Promise<FileSystemFileHandleLike>).then((fh) =>
+        fh.getFile(),
+      )
+      const dataUrl = await fileToDataUrl(file, candidate)
+      if (dataUrl) {
+        rememberImage(candidate, dataUrl)
+        return dataUrl
+      }
+    } catch {
+      // 试下一个写法
+    }
+  }
+  // 最后兜底：枚举目录，按 NFC 归一后比对
+  try {
+    const want = (name.split('/').pop() ?? name).trim().normalize('NFC')
+    for await (const [entryName, entry] of images.entries()) {
+      if (entry.kind !== 'file') continue
+      if (entryName.trim().normalize('NFC') !== want) continue
+      const file = await (entry as FileSystemFileHandleLike).getFile()
+      const dataUrl = await fileToDataUrl(file, entryName)
+      if (dataUrl) {
+        rememberImage(entryName, dataUrl)
+        return dataUrl
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function resolveImage(ref: string): string {
   if (!ref) return ''
-  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return ref
-  const name = ref.split('/').pop() ?? ref
-  // 找不到本地资源时返回空，交给 UI 占位，避免裸文件名变成破图
-  return map.get(name) ?? diskImageByName.get(name) ?? ''
+  if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:')) return ref
+  if (ref.startsWith('blob:')) return '' // 旧的 blob 引用一律作废，交给文件名重新解析
+  // 裸文件名 → 查缓存；查不到返回空，交给 UI 占位
+  return lookupImage(ref)
 }
 
 function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {
@@ -208,11 +284,28 @@ function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {
 
 // ---- Read ----
 
-export async function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
-  revokeImageUrls()
-  const imageMap = await readImageMap(handle)
-  const items: CollectionItem[] = []
+// 串行化：StrictMode / 保存等会并发触发 readVault，串行执行保证图片缓存构建期间不被并发清空。
+let readVaultChain: Promise<unknown> = Promise.resolve()
 
+export function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
+  const run = readVaultChain.then(
+    () => doReadVault(handle),
+    () => doReadVault(handle),
+  )
+  readVaultChain = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
+  // 重新构建图片缓存（data URL，无需吊销；旧字符串随引用消失自动 GC）
+  imageByName = new Map()
+  nameByDataUrl = new Map()
+  await loadAllImages(handle)
+
+  const items: CollectionItem[] = []
   for (const category of CATEGORIES) {
     let dir: FileSystemDirectoryHandleLike
     try {
@@ -226,16 +319,22 @@ export async function readVault(handle: VaultHandle): Promise<CollectionItem[]> 
       const raw = await file.text()
       const item = parseItemMarkdown(raw, category, `${category}/${name}`)
       const rawHero = (raw.match(/hero:\s*(.+)/)?.[1] ?? '').trim()
-      item.images = item.images.map((ref) => resolveImage(ref, imageMap))
+      item.images = item.images.map((ref) => resolveImage(ref))
       item.image = item.images[0] ?? ''
+      const rawThumbnail = item.thumbnail
+      item.thumbnail = resolveImage(rawThumbnail ?? '')
 
-      if (rawHero && !item.image.startsWith('blob:') && !/^https?:\/\//.test(item.image)) {
-        const fileName = rawHero.split('/').pop() ?? rawHero
-        const url = await loadImageByName(handle, fileName)
+      // 缓存没命中时（例如文件名规范化差异）按 hero 名再直接读盘一次
+      if (rawHero && !item.image) {
+        const url = await loadImageByName(handle, rawHero)
         if (url) {
           item.image = url
           item.images = [url]
         }
+      }
+
+      if (rawThumbnail && !item.thumbnail) {
+        item.thumbnail = await loadImageByName(handle, rawThumbnail, 'thumbnails') ?? undefined
       }
 
       items.push(item)
@@ -296,6 +395,7 @@ export async function ensureVaultStructure(handle: VaultHandle): Promise<void> {
     ['switches'],
     ['builds'],
     ['assets', 'images'],
+    ['assets', 'thumbnails'],
     ['settings'],
     ['ai', 'cache'],
   ]
@@ -320,17 +420,20 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
   const baseName = itemImageBasename(item)
   const targetBase = index === 0 ? baseName : `${baseName}-gallery-${index}`
 
+  // 显示引用（data URL）若能还原成已有文件名，直接复用，避免重复写盘
+  const knownName = nameByDataUrl.get(ref)
+  if (knownName) return knownName
+
   if (ref.startsWith('data:')) {
     const decoded = decodeDataUrl(ref)
     if (!decoded) throw new Error('主图数据无效，无法写入本地')
-    const fileName = `${targetBase}.${decoded.ext}`
+    const ext = decoded.ext === 'jpeg' ? 'jpg' : (decoded.ext.replace(/[^a-z0-9]/gi, '') || 'jpg')
+    const fileName = `${targetBase}.${ext}`
     await writeImageFile(handle, fileName, decoded.bytes)
     return fileName
   }
 
   if (ref.startsWith('blob:')) {
-    const known = imageNameByUrl.get(ref)
-    if (known) return known
     try {
       const res = await fetch(ref)
       if (!res.ok) throw new Error('blob 读取失败')
@@ -342,12 +445,8 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
       return fileName
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e)
-      throw new Error(`主图 blob 无法写入 vault/assets/images/（${detail}）`)
+      throw new Error(`主图无法写入 vault/assets/images/（${detail}）`)
     }
-  }
-
-  if (imageNameByUrl.has(ref)) {
-    return imageNameByUrl.get(ref)!
   }
 
   if (/^(https?:)?\/\//.test(ref)) {
@@ -378,15 +477,47 @@ async function persistImages(handle: VaultHandle, item: CollectionItem): Promise
   return persisted
 }
 
-async function writeImageFile(handle: VaultHandle, fileName: string, bytes: Uint8Array): Promise<void> {
-  const images = await ensureDir(handle, ['assets', 'images'])
+async function writeImageFile(
+  handle: VaultHandle,
+  fileName: string,
+  bytes: Uint8Array,
+  directory: 'images' | 'thumbnails' = 'images',
+): Promise<void> {
+  const images = await ensureDir(handle, ['assets', directory])
   const fh = await images.getFileHandle(fileName, { create: true })
   const writable = await fh.createWritable()
   await writable.write(new Blob([bytes as unknown as BlobPart]))
   await writable.close()
-  const file = await fh.getFile()
-  const url = URL.createObjectURL(file)
-  trackImageUrl(fileName, url)
+  // 写盘后立即缓存 data URL，保存后无需等下一次 readVault 也能显示
+  try {
+    const file = await fh.getFile()
+    const dataUrl = await fileToDataUrl(file, fileName)
+    if (dataUrl) rememberImage(fileName, dataUrl)
+  } catch {
+    // 缓存失败无碍，下次 readVault 会重建
+  }
+}
+
+async function persistThumbnail(
+  handle: VaultHandle,
+  item: CollectionItem,
+  ref: string,
+): Promise<string | undefined> {
+  if (!ref) return undefined
+  const knownName = nameByDataUrl.get(ref)
+  if (knownName) return knownName
+
+  if (ref.startsWith('data:')) {
+    const decoded = decodeDataUrl(ref)
+    if (!decoded) throw new Error('缩略图数据无效，无法写入本地')
+    const fileName = `${itemImageBasename(item)}-thumb.jpg`
+    await writeImageFile(handle, fileName, decoded.bytes, 'thumbnails')
+    return fileName
+  }
+
+  const fileName = ref.split('/').pop() ?? ref
+  if (/\.(png|jpe?g|webp|gif|avif)$/i.test(fileName)) return fileName
+  return undefined
 }
 
 export async function writeItem(handle: VaultHandle, item: CollectionItem): Promise<void> {
@@ -398,7 +529,17 @@ export async function writeItem(handle: VaultHandle, item: CollectionItem): Prom
     throw new Error('主图未能写入 vault/assets/images/，请重试')
   }
 
-  const toSerialize: CollectionItem = { ...item, images: imageRefs, image: imageRefs[0] ?? '' }
+  let thumbnailRef = item.thumbnail ?? ''
+  if (!thumbnailRef && /^(data:|blob:|https?:|\/\/)/.test(item.image)) {
+    thumbnailRef = await createThumbnailDataUrl(item.image).catch(() => '')
+  }
+  const thumbnail = await persistThumbnail(handle, item, thumbnailRef)
+  const toSerialize: CollectionItem = {
+    ...item,
+    images: imageRefs,
+    image: imageRefs[0] ?? '',
+    thumbnail,
+  }
   const dir = await ensureDir(handle, [item.category])
   const fh = await dir.getFileHandle(mdFileName, { create: true })
   const writable = await fh.createWritable()

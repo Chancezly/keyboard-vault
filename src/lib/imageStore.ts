@@ -101,6 +101,8 @@ export async function hydrateImageCache(): Promise<void> {
 export function resolveLocalImageRef(ref: string): string {
   if (!ref) return ''
   if (/^(https?:)?\/\//.test(ref) || ref.startsWith('data:') || ref.startsWith('blob:')) return ref
+  // Vite / GitHub Pages 生成的站内资源地址已经可以直接显示，不要再次按裸文件名解析。
+  if (ref.startsWith('/') || ref.startsWith('./') || ref.startsWith('../')) return ref
   const name = ref.split('/').pop() ?? ref
   const fromCache = urlCache.get(name)
   if (fromCache) return fromCache

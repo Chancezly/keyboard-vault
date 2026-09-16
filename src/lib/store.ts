@@ -41,9 +41,10 @@ function resolveRelations(items: CollectionItem[]): CollectionItem[] {
 
 function resolveItemImages(item: CollectionItem): CollectionItem {
   const hero = item.images[0]
-  if (!hero) return { ...item, images: [], image: '' }
+  if (!hero) return { ...item, images: [], image: '', thumbnail: '' }
   const resolved = resolveLocalImageRef(hero)
-  return { ...item, images: [resolved], image: resolved }
+  const thumbnail = resolveLocalImageRef(item.thumbnail ?? '') || resolved
+  return { ...item, images: [resolved], image: resolved, thumbnail }
 }
 
 /** 只读演示：内置 vault 示例，不合并 localStorage */

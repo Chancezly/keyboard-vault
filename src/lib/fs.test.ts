@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { importVaultZip, type VaultHandle } from './fs'
+import { importVaultZip, writeItem, type VaultHandle } from './fs'
+import { createBlankItem } from './store'
 
 class MemoryFile {
   kind = 'file' as const
@@ -71,5 +72,26 @@ describe('vault ZIP restore', () => {
 
     await expect(importVaultZip(root as unknown as VaultHandle, unsafe)).rejects.toThrow('不安全路径')
     expect(root.children.has('keep.md')).toBe(true)
+  })
+})
+
+describe('vault image persistence', () => {
+  it('writes an uploaded thumbnail separately and records it in Markdown', async () => {
+    const root = new MemoryDirectory('vault')
+    const item = createBlankItem('keyboards')
+    item.name = 'Thumbnail Test'
+    item.filePath = '../../vault/keyboards/thumbnail-test.md'
+    item.image = 'data:image/jpeg;base64,AQID'
+    item.images = [item.image]
+    item.thumbnail = 'data:image/jpeg;base64,BAUG'
+
+    await writeItem(root as unknown as VaultHandle, item)
+
+    const thumbnails = (root.children.get('assets') as MemoryDirectory).children.get('thumbnails') as MemoryDirectory
+    expect(thumbnails.children.has('thumbnail-test-thumb.jpg')).toBe(true)
+
+    const keyboards = root.children.get('keyboards') as MemoryDirectory
+    const markdown = keyboards.children.get('thumbnail-test.md') as MemoryFile
+    await expect(markdown.data.text()).resolves.toContain('thumbnail: thumbnail-test-thumb.jpg')
   })
 })

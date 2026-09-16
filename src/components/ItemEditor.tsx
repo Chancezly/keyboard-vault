@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Trash2, Download, Plus, Save } from 'lucide-react'
+import { X, Upload, Trash2, Download, Plus, Save, Loader2 } from 'lucide-react'
 import type { BuildComposition, CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
+import { createThumbnailDataUrl, IMAGE_ACCEPT, normalizeImageFile } from '../lib/imageNormalize'
 import {
   CATEGORY_LABELS,
   STATUS_LABELS,
@@ -151,6 +152,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
   /** 用户是否主动上传过搭配封面（否则保存时快照套件图） */
   const [coverUploaded, setCoverUploaded] = useState(() => Boolean(item.image && item.category === 'builds'))
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const isBuild = draft.category === 'builds'
   const composition = getBuildComposition(draft)
@@ -200,7 +203,9 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         return {
           ...d,
           buildComposition: nextComp,
-          ...(useKbCover ? { image: match.image, images: [match.image] } : {}),
+          ...(useKbCover
+            ? { image: match.image, images: [match.image], thumbnail: match.thumbnail }
+            : {}),
         }
       })
       return
@@ -260,14 +265,22 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
   const profileOptions = collectFieldOptions(inventoryItems, 'keycaps', 'profile', KEYCAP_PROFILE_OPTIONS)
   const materialOptions = collectFieldOptions(inventoryItems, 'keycaps', 'material', KEYCAP_MATERIAL_OPTIONS)
 
-  const handleImage = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const url = reader.result as string
+  const handleImage = async (file: File) => {
+    setImageError(null)
+    setImageBusy(true)
+    try {
+      // 统一转成 JPEG data URL（含手机 HEIC/HEIF），保证浏览器可显示、可落盘
+      const normalized = await normalizeImageFile(file)
+      const url = normalized.dataUrl
+      const thumbnail = await createThumbnailDataUrl(url)
       setCoverUploaded(true)
-      setDraft((d) => ({ ...d, image: url, images: [url, ...d.images.slice(1)] }))
+      setDraft((d) => ({ ...d, image: url, images: [url, ...d.images.slice(1)], thumbnail }))
+    } catch (e) {
+      setImageError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImageBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
     }
-    reader.readAsDataURL(file)
   }
 
   const addTag = () => {
@@ -291,6 +304,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
 
       let image = draft.image
       let images = draft.images
+      let thumbnail = draft.thumbnail
       if (!coverUploaded || !image) {
         const kb = inventoryByName(inventoryItems, 'keyboards', c.keyboard.name)
           ?? (c.keyboard.sourceId
@@ -299,6 +313,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         if (kb?.image) {
           image = kb.image
           images = [kb.image]
+          thumbnail = kb.thumbnail
         }
       }
 
@@ -309,6 +324,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         brand: '',
         image,
         images,
+        thumbnail,
         buildComposition: c,
         fitRating: fit,
         rating: fit,
@@ -366,10 +382,15 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
           <div>
             <Label>封面图片{isBuild ? '（可选；不上传则使用套件图）' : ''}</Label>
             <div
-              onClick={() => fileRef.current?.click()}
+              onClick={() => !imageBusy && fileRef.current?.click()}
               className="relative h-40 rounded-xl overflow-hidden bg-white/[0.03] border border-dashed border-white/[0.12] cursor-pointer hover:border-accent/40 transition-all flex items-center justify-center group"
             >
-              {draft.image ? (
+              {imageBusy ? (
+                <div className="flex flex-col items-center gap-2 text-text-tertiary">
+                  <Loader2 className="w-6 h-6 animate-spin text-accent" />
+                  <span className="text-[12px]">处理图片中…</span>
+                </div>
+              ) : draft.image ? (
                 <>
                   <img src={draft.image} alt="" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -381,18 +402,21 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
               ) : (
                 <div className="flex flex-col items-center gap-2 text-text-tertiary">
                   <Upload className="w-6 h-6" />
-                  <span className="text-[12px]">{isBuild ? '点击上传搭配图，或不上传以使用套件图' : '点击上传本地图片'}</span>
+                  <span className="text-[12px]">{isBuild ? '点击上传搭配图，或不上传以使用套件图' : '点击上传本地图片（含 HEIC）'}</span>
                 </div>
               )}
             </div>
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept={IMAGE_ACCEPT}
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleImage(e.target.files[0])}
+              onChange={(e) => e.target.files?.[0] && void handleImage(e.target.files[0])}
             />
-            {isBuild && draft.image && !coverUploaded && (
+            {imageError && (
+              <p className="text-[11px] text-red-300 mt-1.5">{imageError}</p>
+            )}
+            {isBuild && draft.image && !coverUploaded && !imageError && (
               <p className="text-[10px] text-text-tertiary mt-1.5">当前预览为套件图快照，保存后写入本搭配</p>
             )}
           </div>
@@ -938,4 +962,3 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
     </div>
   )
 }
-

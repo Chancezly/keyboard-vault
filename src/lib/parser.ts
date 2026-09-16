@@ -81,6 +81,7 @@ interface ItemFrontmatter {
   history?: HistoryEvent[]
   images?: {
     hero?: string
+    thumbnail?: string
     gallery?: string[]
   }
   notes?: Record<string, unknown>
@@ -224,6 +225,7 @@ export function parseItemMarkdown(
     tagGroups,
     image: images[0] ?? '',
     images,
+    thumbnail: fm.images?.thumbnail,
     rating: isBuild ? fitRating : ratingDetail?.overall,
     ratingDetail: isBuild
       ? fitRating != null

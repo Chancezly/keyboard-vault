@@ -95,6 +95,8 @@ export interface CollectionItem {
   tagGroups: TagGroup[]
   image: string
   images: string[]
+  /** 首页/列表使用的小尺寸封面；缺失时自动回退到 image。 */
+  thumbnail?: string
   rating?: number
   ratingDetail?: RatingDetail
   acquired?: string

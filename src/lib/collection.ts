@@ -52,6 +52,7 @@ export function loadCollection(): CollectionItem[] {
   for (const item of items) {
     item.images = item.images.map(resolveImage)
     item.image = item.images[0] ?? ''
+    item.thumbnail = resolveImage(item.thumbnail ?? '') || item.image
 
     if (!item.relations.length) continue
     item.relations = item.relations.map((rel) => {

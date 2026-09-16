@@ -27,6 +27,7 @@ ai:
   summary: existing summary
 images:
   hero: hero.jpg
+  thumbnail: hero-thumb.jpg
   gallery:
     - gallery-a.jpg
     - gallery-b.jpg
@@ -43,6 +44,7 @@ images:
     expect(output.state).toMatchObject({ location: 'cabinet' })
     expect(output.images).toEqual({
       hero: 'hero.jpg',
+      thumbnail: 'hero-thumb.jpg',
       gallery: ['gallery-a.jpg', 'gallery-b.jpg'],
     })
   })

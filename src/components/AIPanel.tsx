@@ -34,6 +34,7 @@ import { DEFAULT_VISION_MODEL, getVisionModel, setVisionModel } from '../lib/ai/
 import { prepareImageDataUrl } from '../lib/ai/vision'
 import { identifyGearFromImage } from '../lib/ai/identify'
 import { buildItemFromVision, formatVisionSummary } from '../lib/ai/imageItem'
+import { IMAGE_ACCEPT } from '../lib/imageNormalize'
 
 interface AIPanelProps {
   open: boolean
@@ -511,7 +512,7 @@ export function AIPanel({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={IMAGE_ACCEPT}
           className="hidden"
           onChange={handleVisionFile}
         />

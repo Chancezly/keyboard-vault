@@ -1,92 +1,47 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
-import { ItemCard } from './components/ItemCard'
 import { ItemDetail } from './components/ItemDetail'
 import { ItemEditor } from './components/ItemEditor'
 import { AIPanel } from './components/AIPanel'
-import { EmptyState } from './components/EmptyState'
-import { DataTableView } from './components/DataTableView'
 import { ReadOnlyBanner } from './components/ReadOnlyBanner'
 import { DisconnectDialog } from './components/DisconnectDialog'
 import { MobileTabBar } from './components/MobileTabBar'
 import { MobileMenuSheet } from './components/MobileMenuSheet'
-import { filterItems, sortItems, getStats, getAllTags, loadPreferences } from './lib/collection'
+import { CollectionContent } from './features/collection/CollectionContent'
+import { useCollectionView } from './features/collection/useCollectionView'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
-import type { CollectionItem, ItemCategory, ItemStatus, SortOption } from './lib/types'
+import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
 import { CATEGORY_LABELS } from './lib/types'
-
-const SORT_STORAGE_KEY = 'keyvault:sort:v1'
-
-function loadSortPreference(): SortOption {
-  try {
-    const raw = localStorage.getItem(SORT_STORAGE_KEY)
-    if (raw === 'name' || raw === 'addedAt' || raw === 'acquired') return raw
-  } catch {
-    // ignore
-  }
-  return 'name'
-}
 
 export default function App() {
   const vault = useVault()
   const { items, writable: vaultWritable } = vault
   const readOnly = !vaultWritable
-
-  const [category, setCategory] = useState<ItemCategory | 'all'>('all')
-  const [status, setStatus] = useState<ItemStatus | 'all'>('all')
-  const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<SortOption>(() => loadSortPreference())
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid')
+  const collection = useCollectionView(items)
+  const {
+    category,
+    setCategory,
+    status,
+    setStatus,
+    search,
+    setSearch,
+    sortBy,
+    changeSort,
+    viewMode,
+    setViewMode,
+    filteredItems,
+    stats,
+    allTags,
+    preferences,
+    studioSuggestions,
+  } = collection
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
   const [editing, setEditing] = useState<{ item: CollectionItem; isNew: boolean } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-  // 手机端不提供表格视图
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)')
-    const sync = () => {
-      if (mq.matches) {
-        setViewMode((m) => (m === 'table' ? 'grid' : m))
-      }
-    }
-    sync()
-    mq.addEventListener('change', sync)
-    return () => mq.removeEventListener('change', sync)
-  }, [])
-
-  const stats = useMemo(() => getStats(items), [items])
-  const allTags = useMemo(() => getAllTags(items), [items])
-  const preferences = useMemo(() => loadPreferences(), [])
-  const studioSuggestions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          items
-            .filter((i) => i.category === 'keyboards')
-            .map((i) => i.brand.trim())
-            .filter(Boolean),
-        ),
-      ),
-    [items],
-  )
-
-  const filtered = useMemo(() => {
-    const list = filterItems(items, category, status, search)
-    return sortItems(list, sortBy)
-  }, [items, category, status, search, sortBy])
-
-  const handleSortChange = (next: SortOption) => {
-    setSortBy(next)
-    try {
-      localStorage.setItem(SORT_STORAGE_KEY, next)
-    } catch {
-      // ignore
-    }
-  }
 
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
 
@@ -172,10 +127,10 @@ export default function App() {
             status={status}
             onStatusChange={setStatus}
             sortBy={sortBy}
-            onSortChange={handleSortChange}
+            onSortChange={changeSort}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            resultCount={filtered.length}
+            resultCount={filteredItems.length}
             title={title}
             onNew={handleNew}
             readOnly={readOnly}
@@ -198,77 +153,21 @@ export default function App() {
           )}
 
           <div className="flex-1 overflow-y-auto px-4 lg:px-8 pb-4 lg:pb-8 min-h-0 overscroll-y-contain">
-            {viewMode === 'table' ? (
-              category === 'all' ? (
-                <div className="flex flex-col items-center justify-center py-16 lg:py-24 text-center max-w-md mx-auto px-2">
-                  <p className="text-[15px] text-text-secondary">表格管理需要选定分类</p>
-                  <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
-                    请在底部或左侧选择「套件」「键帽」或「轴体」，即可横向浏览并批量编辑所有条目。
-                  </p>
-                </div>
-              ) : category === 'builds' ? (
-                <div className="flex flex-col items-center justify-center py-16 lg:py-24 text-center max-w-md mx-auto px-2">
-                  <p className="text-[15px] text-text-secondary">搭配暂不支持表格编辑</p>
-                  <p className="text-[13px] text-text-tertiary mt-2">请切换回卡片或列表视图，或选择其他分类。</p>
-                </div>
-              ) : readOnly ? (
-                <div className="flex flex-col items-center justify-center py-16 lg:py-24 text-center max-w-md mx-auto px-2">
-                  <p className="text-[15px] text-text-secondary">表格编辑需要连接本地文件夹</p>
-                  <p className="text-[13px] text-text-tertiary mt-2 leading-relaxed">
-                    连接后可横向浏览并批量修改规格、价格与购买时间。
-                  </p>
-                </div>
-              ) : filtered.length === 0 ? (
-                <EmptyState
-                  search={search}
-                  readOnly={readOnly}
-                  vaultSupported={vault.supported}
-                  onConnect={vault.connect}
-                  onNew={handleNew}
-                  onWishlist={() => setStatus('wishlist')}
-                  wishlistCount={stats.wishlist}
-                />
-              ) : (
-                <DataTableView
-                  items={filtered}
-                  category={category}
-                  busy={vault.busy}
-                  onSave={vault.save}
-                />
-              )
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                search={search}
-                readOnly={readOnly}
-                vaultSupported={vault.supported}
-                onConnect={vault.connect}
-                onNew={handleNew}
-                onWishlist={() => setStatus('wishlist')}
-                wishlistCount={stats.wishlist}
-              />
-            ) : viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-6">
-                {filtered.map((item) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    onClick={() => setSelectedItem(item)}
-                    viewMode="grid"
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 max-w-4xl">
-                {filtered.map((item) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    onClick={() => setSelectedItem(item)}
-                    viewMode="list"
-                  />
-                ))}
-              </div>
-            )}
+            <CollectionContent
+              items={filteredItems}
+              category={category}
+              viewMode={viewMode}
+              search={search}
+              readOnly={readOnly}
+              vaultSupported={vault.supported}
+              vaultBusy={vault.busy}
+              wishlistCount={stats.wishlist}
+              onConnect={vault.connect}
+              onNew={handleNew}
+              onShowWishlist={() => setStatus('wishlist')}
+              onSelectItem={setSelectedItem}
+              onSave={vault.save}
+            />
           </div>
         </main>
 
