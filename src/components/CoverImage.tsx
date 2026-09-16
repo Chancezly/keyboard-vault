@@ -7,6 +7,7 @@ interface CoverImageProps {
   alt: string
   className?: string
   imgClassName?: string
+  position?: { x: number; y: number }
 }
 
 function isUsableSrc(src?: string): boolean {
@@ -20,7 +21,7 @@ function isUsableSrc(src?: string): boolean {
 }
 
 /** 统一封面：有图显示图片；无图或加载失败显示品牌化占位 */
-export function CoverImage({ src, alt, className = '', imgClassName = '' }: CoverImageProps) {
+export function CoverImage({ src, alt, className = '', imgClassName = '', position }: CoverImageProps) {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function CoverImage({ src, alt, className = '', imgClassName = '' }: Cove
           src={src}
           alt={alt}
           className={`block w-full h-full object-cover ${imgClassName}`}
+          style={{ objectPosition: `${position?.x ?? 50}% ${position?.y ?? 50}%` }}
           // 首页使用 640px 缩略图，立即加载不会重新读取原始大图。
           loading="eager"
           decoding="async"

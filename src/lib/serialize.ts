@@ -126,6 +126,7 @@ export function serializeItem(item: CollectionItem): string {
     hero: item.images[0],
     thumbnail: item.thumbnail,
     gallery: item.images.slice(1),
+    focus: item.coverPosition,
   })
 
   const frontmatter: Record<string, unknown> = { ...(item.sourceFrontmatter ?? {}) }
@@ -153,7 +154,7 @@ export function serializeItem(item: CollectionItem): string {
   else delete frontmatter.tags
   if (!isBuild && item.history.length) frontmatter.history = item.history
   else if (!isBuild) delete frontmatter.history
-  if (Object.keys(images).length) frontmatter.images = mergeSection(frontmatter.images, images, ['hero', 'thumbnail', 'gallery'])
+  if (Object.keys(images).length) frontmatter.images = mergeSection(frontmatter.images, images, ['hero', 'thumbnail', 'gallery', 'focus'])
   else delete frontmatter.images
 
   const yaml = stringify(frontmatter).trimEnd()

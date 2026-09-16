@@ -112,6 +112,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
         <CoverImage
           src={item.thumbnail}
           alt={displayName}
+          position={item.coverPosition}
           className="w-[68px] h-[68px] rounded-[14px] shrink-0 ring-1 ring-white/[0.06]"
           imgClassName="group-hover:scale-[1.03] transition-transform duration-500 ease-out"
         />
@@ -181,6 +182,7 @@ export function ItemCard({ item, onClick, viewMode }: ItemCardProps) {
         <CoverImage
           src={item.thumbnail}
           alt={displayName}
+          position={item.coverPosition}
           className="absolute inset-0"
           imgClassName="group-hover:scale-[1.04] transition-transform duration-700 ease-out"
         />

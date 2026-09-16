@@ -83,6 +83,7 @@ interface ItemFrontmatter {
     hero?: string
     thumbnail?: string
     gallery?: string[]
+    focus?: { x?: number; y?: number }
   }
   notes?: Record<string, unknown>
 }
@@ -198,6 +199,13 @@ export function parseItemMarkdown(
   const legacyBuild = fm.build ?? {}
   const history = fm.history ?? []
   const images = [fm.images?.hero, ...(fm.images?.gallery ?? [])].filter(Boolean) as string[]
+  const focus = fm.images?.focus
+  const coverPosition = focus && (focus.x != null || focus.y != null)
+    ? {
+        x: Math.max(0, Math.min(100, Number(focus.x ?? 50))),
+        y: Math.max(0, Math.min(100, Number(focus.y ?? 50))),
+      }
+    : undefined
   const { flat: tags, groups: tagGroups } = normalizeTags(fm.tags)
   const relations = normalizeRelations(fm.relations)
 
@@ -226,6 +234,7 @@ export function parseItemMarkdown(
     image: images[0] ?? '',
     images,
     thumbnail: fm.images?.thumbnail,
+    coverPosition,
     rating: isBuild ? fitRating : ratingDetail?.overall,
     ratingDetail: isBuild
       ? fitRating != null

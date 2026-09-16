@@ -68,4 +68,20 @@ state:
     expect(output.identity).toMatchObject({ name: 'After', externalId: 'abc' })
     expect(output.state).toMatchObject({ location: 'desk', privateFlag: true })
   })
+
+  it('round-trips the cover focus position', () => {
+    const item = parseItemMarkdown(`---
+identity:
+  id: focused
+images:
+  hero: board.jpg
+  focus:
+    x: 25
+    y: 70
+---
+`, 'keyboards', 'keyboards/focused.md')
+
+    expect(item.coverPosition).toEqual({ x: 25, y: 70 })
+    expect((frontmatter(serializeItem(item)).images as Record<string, unknown>).focus).toEqual({ x: 25, y: 70 })
+  })
 })

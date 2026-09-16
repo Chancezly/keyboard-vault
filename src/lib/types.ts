@@ -97,6 +97,8 @@ export interface CollectionItem {
   images: string[]
   /** 首页/列表使用的小尺寸封面；缺失时显示占位，不隐式加载原图。 */
   thumbnail?: string
+  /** 封面裁剪焦点百分比；用于 object-fit: cover 时保留主体。 */
+  coverPosition?: { x: number; y: number }
   rating?: number
   ratingDetail?: RatingDetail
   acquired?: string

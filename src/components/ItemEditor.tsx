@@ -205,7 +205,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
           ...d,
           buildComposition: nextComp,
           ...(useKbCover
-            ? { image: match.image, images: [match.image], thumbnail: match.thumbnail }
+            ? { image: match.image, images: [match.image], thumbnail: match.thumbnail, coverPosition: match.coverPosition }
             : {}),
         }
       })
@@ -275,7 +275,13 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
       const url = normalized.dataUrl
       const thumbnail = await createThumbnailDataUrl(url)
       setCoverUploaded(true)
-      setDraft((d) => ({ ...d, image: url, images: [url, ...d.images.slice(1)], thumbnail }))
+      setDraft((d) => ({
+        ...d,
+        image: url,
+        images: [url, ...d.images.slice(1)],
+        thumbnail,
+        coverPosition: { x: 50, y: 50 },
+      }))
     } catch (e) {
       setImageError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -306,6 +312,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
       let image = draft.image
       let images = draft.images
       let thumbnail = draft.thumbnail
+      let coverPosition = draft.coverPosition
       if (!coverUploaded || !image) {
         const kb = inventoryByName(inventoryItems, 'keyboards', c.keyboard.name)
           ?? (c.keyboard.sourceId
@@ -315,6 +322,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
           image = kb.image
           images = [kb.image]
           thumbnail = kb.thumbnail
+          coverPosition = kb.coverPosition
         }
       }
 
@@ -326,6 +334,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         image,
         images,
         thumbnail,
+        coverPosition,
         buildComposition: c,
         fitRating: fit,
         rating: fit,
@@ -393,7 +402,12 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                 </div>
               ) : draft.image ? (
                 <>
-                  <img src={draft.image} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={draft.image}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: `${draft.coverPosition?.x ?? 50}% ${draft.coverPosition?.y ?? 50}%` }}
+                  />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="flex items-center gap-2 text-[12px] text-white">
                       <Upload className="w-4 h-4" /> 更换图片
@@ -416,6 +430,32 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
             />
             {imageError && (
               <p className="text-[11px] text-red-300 mt-1.5">{imageError}</p>
+            )}
+            {draft.image && !imageBusy && (
+              <div className="mt-3 grid grid-cols-2 gap-4 rounded-xl bg-white/[0.025] px-3 py-2.5">
+                <label className="text-[11px] text-text-tertiary">
+                  <span className="flex justify-between"><span>水平焦点</span><span>{Math.round(draft.coverPosition?.x ?? 50)}%</span></span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={draft.coverPosition?.x ?? 50}
+                    onChange={(e) => set('coverPosition', { x: Number(e.target.value), y: draft.coverPosition?.y ?? 50 })}
+                    className="mt-1 w-full accent-[#6b8afd]"
+                  />
+                </label>
+                <label className="text-[11px] text-text-tertiary">
+                  <span className="flex justify-between"><span>垂直焦点</span><span>{Math.round(draft.coverPosition?.y ?? 50)}%</span></span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={draft.coverPosition?.y ?? 50}
+                    onChange={(e) => set('coverPosition', { x: draft.coverPosition?.x ?? 50, y: Number(e.target.value) })}
+                    className="mt-1 w-full accent-[#6b8afd]"
+                  />
+                </label>
+              </div>
             )}
             {isBuild && draft.image && !coverUploaded && !imageError && (
               <p className="text-[10px] text-text-tertiary mt-1.5">当前预览为套件图快照，保存后写入本搭配</p>

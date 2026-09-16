@@ -146,6 +146,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
             <CoverImage
               src={item.image}
               alt={displayName}
+              position={item.coverPosition}
               className="absolute inset-0"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#111113] via-[#111113]/50 to-transparent pointer-events-none" />
