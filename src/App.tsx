@@ -129,6 +129,12 @@ export default function App() {
     if (report) setDiagnostics(report)
   }
 
+  const handleRepairDuplicateIds = async () => {
+    if (!window.confirm('将保留每组第一条记录，并为后续重复资料生成新的唯一 ID。现有关系仍指向第一条记录，是否继续？')) return
+    const report = await vault.repairDuplicateIds()
+    if (report) setDiagnostics(report)
+  }
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-surface overflow-hidden">
       <div className="fixed inset-0 pointer-events-none">
@@ -278,7 +284,11 @@ export default function App() {
       )}
 
       {diagnostics && (
-        <VaultDiagnosticsDialog report={diagnostics} onClose={() => setDiagnostics(null)} />
+        <VaultDiagnosticsDialog
+          report={diagnostics}
+          onClose={() => setDiagnostics(null)}
+          onRepairDuplicateIds={handleRepairDuplicateIds}
+        />
       )}
     </div>
   )

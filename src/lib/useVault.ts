@@ -27,6 +27,7 @@ import { assignItemFilePath, collectTakenBasenames } from './naming'
 import { hydrateBuildItems } from './builds'
 import { useNotifications } from '../features/notifications/notification'
 import { diagnoseVault, type VaultDiagnosticsReport } from './vaultDiagnostics'
+import { repairDuplicateIds as repairDuplicateVaultIds } from './vaultMaintenance'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -48,6 +49,7 @@ export interface VaultState {
   importZip: (file: File) => Promise<void>
   generateThumbnails: () => Promise<void>
   diagnose: () => Promise<VaultDiagnosticsReport | null>
+  repairDuplicateIds: () => Promise<VaultDiagnosticsReport | null>
   loadHero: (item: CollectionItem) => Promise<CollectionItem>
 }
 
@@ -94,6 +96,15 @@ export function useVault(): VaultState {
       notifications.error(
         `已隔离 ${issues.length} 个损坏文件`,
         `${first.filePath}：${first.message}${issues.length > 1 ? '；其余问题可在收藏库诊断中查看。' : ''}`,
+      )
+    }
+    const idCounts = new Map<string, number>()
+    for (const item of loaded) idCounts.set(item.id, (idCounts.get(item.id) ?? 0) + 1)
+    const duplicateGroups = Array.from(idCounts.values()).filter((count) => count > 1).length
+    if (duplicateGroups > 0) {
+      notifications.info(
+        `发现 ${duplicateGroups} 组重复 ID`,
+        '请运行“收藏库诊断”，确认后可安全修复后续重复资料。',
       )
     }
     return loaded
@@ -358,6 +369,30 @@ export function useVault(): VaultState {
     }
   }, [mode, handle, notifications])
 
+  const repairDuplicateIds = useCallback(async (): Promise<VaultDiagnosticsReport | null> => {
+    if (mode !== 'directory' || !handle) return null
+    setBusy(true)
+    try {
+      const repairs = await repairDuplicateVaultIds(handle)
+      if (repairs.length === 0) {
+        notifications.info('无需修复重复 ID', '当前收藏库没有重复 ID。')
+      } else {
+        setItems(await readDirectory(handle))
+        notifications.success(
+          '重复 ID 已安全修复',
+          `已为 ${repairs.length} 条后续重复资料分配新 ID，首条记录保持不变。`,
+        )
+      }
+      return await diagnoseVault(handle)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      notifications.error('重复 ID 修复失败', message)
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }, [mode, handle, readDirectory, notifications])
+
   return {
     items,
     mode,
@@ -374,6 +409,7 @@ export function useVault(): VaultState {
     importZip,
     generateThumbnails,
     diagnose,
+    repairDuplicateIds,
     loadHero,
   }
 }

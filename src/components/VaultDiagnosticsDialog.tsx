@@ -1,9 +1,11 @@
-import { AlertTriangle, CheckCircle2, FileText, HardDrive, Image, Images, X } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, FileText, HardDrive, Image, Images, Wrench, X } from 'lucide-react'
 import type { VaultDiagnosticsReport } from '../lib/vaultDiagnostics'
 
 interface VaultDiagnosticsDialogProps {
   report: VaultDiagnosticsReport
   onClose: () => void
+  onRepairDuplicateIds: () => Promise<void>
 }
 
 function formatBytes(bytes: number): string {
@@ -13,7 +15,8 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`
 }
 
-export function VaultDiagnosticsDialog({ report, onClose }: VaultDiagnosticsDialogProps) {
+export function VaultDiagnosticsDialog({ report, onClose, onRepairDuplicateIds }: VaultDiagnosticsDialogProps) {
+  const [repairing, setRepairing] = useState(false)
   const errorCount = report.issues.filter((issue) => issue.severity === 'error').length
   const warningCount = report.issues.length - errorCount
   const cards = [
@@ -114,7 +117,25 @@ export function VaultDiagnosticsDialog({ report, onClose }: VaultDiagnosticsDial
           )}
         </div>
 
-        <footer className="flex justify-end border-t border-white/[0.07] px-5 py-3 sm:px-6">
+        <footer className="flex items-center justify-end gap-2 border-t border-white/[0.07] px-5 py-3 sm:px-6">
+          {report.counts.duplicateIds > 0 && (
+            <button
+              type="button"
+              disabled={repairing}
+              onClick={async () => {
+                setRepairing(true)
+                try {
+                  await onRepairDuplicateIds()
+                } finally {
+                  setRepairing(false)
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-amber-400/15 px-4 py-2 text-sm text-amber-300 hover:bg-amber-400/20 disabled:opacity-50"
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              {repairing ? '正在修复…' : '修复重复 ID'}
+            </button>
+          )}
           <button type="button" onClick={onClose} className="rounded-xl bg-white/[0.08] px-4 py-2 text-sm hover:bg-white/[0.12]">
             完成
           </button>
