@@ -28,6 +28,7 @@ import { hydrateBuildItems } from './builds'
 import { useNotifications } from '../features/notifications/notification'
 import { diagnoseVault, type VaultDiagnosticsReport } from './vaultDiagnostics'
 import { repairDuplicateIds as repairDuplicateVaultIds } from './vaultMaintenance'
+import { enqueueVaultWrite } from './vaultWriteQueue'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -213,7 +214,10 @@ export function useVault(): VaultState {
           const previous = items.find((current) => current.id === stabilized.id)
           const taken = collectTakenBasenames(items, stabilized.id)
           const toSave = assignItemFilePath(stabilized, taken)
-          const savedSummary = await writeItem(handle, toSave, previous)
+          const savedSummary = await enqueueVaultWrite(
+            handle,
+            () => writeItem(handle, toSave, previous),
+          )
           setItems((current) => upsertCollectionItem(current, savedSummary))
           const saved = await loadItemHero(handle, savedSummary)
           notifications.success('收藏已保存', saved.name)
@@ -247,7 +251,7 @@ export function useVault(): VaultState {
       if (mode === 'directory' && handle) {
         setBusy(true)
         try {
-          await deleteItemFile(handle, item)
+          await enqueueVaultWrite(handle, () => deleteItemFile(handle, item))
           setItems(await readDirectory(handle))
           notifications.success('收藏已删除', item.name)
         } catch (e) {
@@ -290,10 +294,12 @@ export function useVault(): VaultState {
       if (!confirmed) return
       setBusy(true)
       try {
-        const before = await exportVaultZip(handle)
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-        downloadBackup(before, `${handle.name || 'vault'}-before-restore-${stamp}.zip`)
-        await importVaultZip(handle, file)
+        await enqueueVaultWrite(handle, async () => {
+          const before = await exportVaultZip(handle)
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+          downloadBackup(before, `${handle.name || 'vault'}-before-restore-${stamp}.zip`)
+          await importVaultZip(handle, file)
+        })
         setItems(await readDirectory(handle))
         notifications.success('收藏库恢复完成', '恢复前的原数据已自动下载备份。')
       } catch (e) {
@@ -316,7 +322,10 @@ export function useVault(): VaultState {
       duration: 0,
     })
     try {
-      const result = await generateMissingThumbnails(handle)
+      const result = await enqueueVaultWrite(
+        handle,
+        () => generateMissingThumbnails(handle),
+      )
       if (result.generated > 0) setItems(await readDirectory(handle))
 
       if (result.failed > 0) {
@@ -373,7 +382,10 @@ export function useVault(): VaultState {
     if (mode !== 'directory' || !handle) return null
     setBusy(true)
     try {
-      const repairs = await repairDuplicateVaultIds(handle)
+      const repairs = await enqueueVaultWrite(
+        handle,
+        () => repairDuplicateVaultIds(handle),
+      )
       if (repairs.length === 0) {
         notifications.info('无需修复重复 ID', '当前收藏库没有重复 ID。')
       } else {
