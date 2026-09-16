@@ -125,6 +125,7 @@ export default function App() {
         onRequestDisconnect={() => setDisconnectOpen(true)}
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
+        onGenerateThumbnails={vault.generateThumbnails}
       />
 
       <div className="flex flex-1 min-w-0 flex-col lg:flex-row overflow-hidden">
@@ -209,6 +210,7 @@ export default function App() {
         onRequestDisconnect={() => setDisconnectOpen(true)}
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
+        onGenerateThumbnails={vault.generateThumbnails}
       />
 
       {selectedItem && !editing && (

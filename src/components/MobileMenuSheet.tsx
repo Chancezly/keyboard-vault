@@ -8,6 +8,7 @@ import {
   Unplug,
   Download,
   Upload,
+  Images,
 } from 'lucide-react'
 interface MobileMenuSheetProps {
   open: boolean
@@ -28,6 +29,7 @@ interface MobileMenuSheetProps {
   onRequestDisconnect: () => void
   onExportZip: () => void
   onImportZip: (file: File) => void
+  onGenerateThumbnails: () => void
 }
 
 export function MobileMenuSheet({
@@ -44,6 +46,7 @@ export function MobileMenuSheet({
   onRequestDisconnect,
   onExportZip,
   onImportZip,
+  onGenerateThumbnails,
 }: MobileMenuSheetProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
 
@@ -174,6 +177,15 @@ export function MobileMenuSheet({
                   导入
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={onGenerateThumbnails}
+                disabled={vaultBusy}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
+              >
+                <Images className="w-4 h-4" />
+                补齐旧缩略图
+              </button>
             </>
           ) : (
             <>

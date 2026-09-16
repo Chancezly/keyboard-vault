@@ -15,6 +15,7 @@ import {
   exportVaultZip,
   importVaultZip,
   ensureVaultStructure,
+  generateMissingThumbnails,
   stabilizeImageRefs,
   type VaultHandle,
 } from './fs'
@@ -41,6 +42,7 @@ export interface VaultState {
   reload: () => Promise<void>
   exportZip: () => Promise<void>
   importZip: (file: File) => Promise<void>
+  generateThumbnails: () => Promise<void>
 }
 
 export function useVault(): VaultState {
@@ -254,6 +256,42 @@ export function useVault(): VaultState {
     [mode, handle, downloadBackup, notifications],
   )
 
+  const generateThumbnails = useCallback(async () => {
+    if (mode !== 'directory' || !handle) return
+    setBusy(true)
+    const progressId = notifications.notify({
+      title: '正在检查旧资料缩略图',
+      message: '仅处理缺少缩略图的资料，请保持页面打开。',
+      tone: 'info',
+      duration: 0,
+    })
+    try {
+      const result = await generateMissingThumbnails(handle)
+      if (result.generated > 0) setItems(await readVault(handle))
+
+      if (result.failed > 0) {
+        const summary = `已生成 ${result.generated} 张，失败 ${result.failed} 张。${result.errors[0]?.message ?? ''}`
+        notifications.error('部分缩略图生成失败', summary)
+      } else if (result.generated > 0) {
+        notifications.success(
+          '旧资料缩略图已生成',
+          `新增 ${result.generated} 张，已有 ${result.skippedExisting} 张。`,
+        )
+      } else {
+        notifications.info(
+          '无需生成缩略图',
+          `已检查 ${result.scanned} 条资料，现有缩略图均已保留。`,
+        )
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      notifications.error('批量生成缩略图失败', message)
+    } finally {
+      notifications.dismiss(progressId)
+      setBusy(false)
+    }
+  }, [mode, handle, notifications])
+
   return {
     items,
     mode,
@@ -268,5 +306,6 @@ export function useVault(): VaultState {
     reload,
     exportZip,
     importZip,
+    generateThumbnails,
   }
 }

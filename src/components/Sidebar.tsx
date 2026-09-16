@@ -11,6 +11,7 @@ import {
   Unplug,
   Download,
   Upload,
+  Images,
   Heart,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
@@ -39,6 +40,7 @@ interface SidebarProps {
   onRequestDisconnect: () => void
   onExportZip: () => void
   onImportZip: (file: File) => void
+  onGenerateThumbnails: () => void
 }
 
 const NAV_ITEMS: { id: ItemCategory | 'all'; icon: typeof Keyboard; color: string }[] = [
@@ -65,6 +67,7 @@ export function Sidebar({
   onRequestDisconnect,
   onExportZip,
   onImportZip,
+  onGenerateThumbnails,
 }: SidebarProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
   return (
@@ -206,6 +209,16 @@ export function Sidebar({
                 }}
               />
             </div>
+            <button
+              type="button"
+              onClick={onGenerateThumbnails}
+              disabled={vaultBusy}
+              title="仅为缺少缩略图的旧资料批量生成，不修改原图"
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Images className="w-3.5 h-3.5" />
+              <span>补齐旧缩略图</span>
+            </button>
           </>
         ) : (
           <button

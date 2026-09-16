@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { importVaultZip, writeItem, type VaultHandle } from './fs'
+import { generateMissingThumbnails, importVaultZip, writeItem, type VaultHandle } from './fs'
+import { serializeItem } from './serialize'
 import { createBlankItem } from './store'
 
 class MemoryFile {
@@ -93,5 +94,40 @@ describe('vault image persistence', () => {
     const keyboards = root.children.get('keyboards') as MemoryDirectory
     const markdown = keyboards.children.get('thumbnail-test.md') as MemoryFile
     await expect(markdown.data.text()).resolves.toContain('thumbnail: thumbnail-test-thumb.jpg')
+  })
+
+  it('backfills only missing thumbnails and is safe to run again', async () => {
+    const root = new MemoryDirectory('vault')
+    const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
+    const assets = await root.getDirectoryHandle('assets', { create: true })
+    const images = await assets.getDirectoryHandle('images', { create: true })
+    const hero = await images.getFileHandle('legacy-hero.jpg', { create: true })
+    hero.data = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' })
+
+    const item = createBlankItem('keyboards')
+    item.id = 'legacy-thumbnail-test'
+    item.name = 'Legacy Thumbnail Test'
+    item.filePath = 'keyboards/legacy-thumbnail-test.md'
+    item.image = 'legacy-hero.jpg'
+    item.images = ['legacy-hero.jpg']
+    item.thumbnail = undefined
+    const markdown = await keyboards.getFileHandle('legacy-thumbnail-test.md', { create: true })
+    markdown.data = new Blob([serializeItem(item)], { type: 'text/markdown' })
+
+    const dependencies = {
+      loadSource: async () => 'data:image/jpeg;base64,AQID',
+      createThumbnail: async () => 'data:image/jpeg;base64,BAUG',
+    }
+    const first = await generateMissingThumbnails(root as unknown as VaultHandle, dependencies)
+    expect(first).toMatchObject({ scanned: 1, generated: 1, failed: 0 })
+
+    const thumbnails = assets.children.get('thumbnails') as MemoryDirectory
+    expect(thumbnails.children.has('legacy-thumbnail-test-thumb.jpg')).toBe(true)
+    await expect(markdown.data.text()).resolves.toContain(
+      'thumbnail: legacy-thumbnail-test-thumb.jpg',
+    )
+
+    const second = await generateMissingThumbnails(root as unknown as VaultHandle, dependencies)
+    expect(second).toMatchObject({ scanned: 1, generated: 0, skippedExisting: 1, failed: 0 })
   })
 })

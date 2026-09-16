@@ -585,6 +585,128 @@ export async function deleteItemFile(handle: VaultHandle, item: CollectionItem):
 
 // ---- Backup / migration (ZIP) ----
 
+export interface ThumbnailMigrationResult {
+  scanned: number
+  generated: number
+  skippedExisting: number
+  skippedNoImage: number
+  failed: number
+  errors: Array<{ filePath: string; message: string }>
+}
+
+interface ThumbnailMigrationDependencies {
+  loadSource?: (handle: VaultHandle, ref: string) => Promise<string | null>
+  createThumbnail?: (source: string) => Promise<string>
+}
+
+async function findFileByName(
+  handle: VaultHandle,
+  ref: string,
+  directory: 'images' | 'thumbnails',
+): Promise<File | null> {
+  let dir: FileSystemDirectoryHandleLike
+  try {
+    dir = await handle.getDirectoryHandle('assets').then((assets) =>
+      assets.getDirectoryHandle(directory),
+    )
+  } catch {
+    return null
+  }
+
+  for (const candidate of nameVariants(ref)) {
+    try {
+      return await (dir.getFileHandle(candidate) as Promise<FileSystemFileHandleLike>).then((fh) =>
+        fh.getFile(),
+      )
+    } catch {
+      // Try the next Unicode-normalized filename.
+    }
+  }
+
+  const wanted = (ref.split('/').pop() ?? ref).trim().normalize('NFC')
+  for await (const [name, entry] of dir.entries()) {
+    if (entry.kind !== 'file' || name.trim().normalize('NFC') !== wanted) continue
+    return (entry as FileSystemFileHandleLike).getFile()
+  }
+  return null
+}
+
+async function loadThumbnailSource(handle: VaultHandle, ref: string): Promise<string | null> {
+  if (!ref) return null
+  if (/^(data:|https?:|\/\/)/.test(ref)) return ref
+  const file = await findFileByName(handle, ref, 'images')
+  return file ? fileToDataUrl(file, file.name) : null
+}
+
+async function thumbnailReferenceExists(handle: VaultHandle, ref: string): Promise<boolean> {
+  if (!ref) return false
+  if (/^(data:|https?:|\/\/)/.test(ref)) return true
+  return Boolean(await findFileByName(handle, ref, 'thumbnails'))
+}
+
+/**
+ * 为旧 Markdown 中缺少缩略图的条目补齐缩略图。
+ * 顺序执行以限制峰值内存；已有且有效的缩略图不会重写，原图也不会改动。
+ */
+export async function generateMissingThumbnails(
+  handle: VaultHandle,
+  dependencies: ThumbnailMigrationDependencies = {},
+): Promise<ThumbnailMigrationResult> {
+  await ensureVaultStructure(handle)
+  const loadSource = dependencies.loadSource ?? loadThumbnailSource
+  const createThumbnail = dependencies.createThumbnail ?? createThumbnailDataUrl
+  const result: ThumbnailMigrationResult = {
+    scanned: 0,
+    generated: 0,
+    skippedExisting: 0,
+    skippedNoImage: 0,
+    failed: 0,
+    errors: [],
+  }
+
+  for (const category of CATEGORIES) {
+    const dir = await handle.getDirectoryHandle(category)
+    for await (const [name, entry] of dir.entries()) {
+      if (entry.kind !== 'file' || !name.endsWith('.md')) continue
+      result.scanned++
+      const filePath = `${category}/${name}`
+      try {
+        const fileHandle = entry as FileSystemFileHandleLike
+        const raw = await (await fileHandle.getFile()).text()
+        const item = parseItemMarkdown(raw, category, filePath)
+        const heroRef = item.images[0]
+        if (!heroRef) {
+          result.skippedNoImage++
+          continue
+        }
+        if (item.thumbnail && (await thumbnailReferenceExists(handle, item.thumbnail))) {
+          result.skippedExisting++
+          continue
+        }
+
+        const source = await loadSource(handle, heroRef)
+        if (!source) throw new Error(`找不到主图：${heroRef}`)
+        const thumbnailDataUrl = await createThumbnail(source)
+        const decoded = decodeDataUrl(thumbnailDataUrl)
+        if (!decoded) throw new Error('生成的缩略图数据无效')
+
+        const thumbnailName = `${basenameFromFilePath(item.filePath) ?? itemImageBasename(item)}-thumb.jpg`
+        await writeImageFile(handle, thumbnailName, decoded.bytes, 'thumbnails')
+        const writable = await fileHandle.createWritable()
+        await writable.write(serializeItem({ ...item, thumbnail: thumbnailName }))
+        await writable.close()
+        result.generated++
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        result.failed++
+        result.errors.push({ filePath, message })
+      }
+    }
+  }
+
+  return result
+}
+
 async function addDirToZip(
   dir: FileSystemDirectoryHandleLike,
   zip: JSZip,
