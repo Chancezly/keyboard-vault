@@ -8,12 +8,14 @@ import { ReadOnlyBanner } from './components/ReadOnlyBanner'
 import { DisconnectDialog } from './components/DisconnectDialog'
 import { MobileTabBar } from './components/MobileTabBar'
 import { MobileMenuSheet } from './components/MobileMenuSheet'
+import { VaultDiagnosticsDialog } from './components/VaultDiagnosticsDialog'
 import { CollectionContent } from './features/collection/CollectionContent'
 import { useCollectionView } from './features/collection/useCollectionView'
 import { createBlankItem } from './lib/store'
 import { useVault } from './lib/useVault'
 import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
 import { CATEGORY_LABELS } from './lib/types'
+import type { VaultDiagnosticsReport } from './lib/vaultDiagnostics'
 
 export default function App() {
   const vault = useVault()
@@ -44,6 +46,7 @@ export default function App() {
   const [aiOpen, setAiOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [diagnostics, setDiagnostics] = useState<VaultDiagnosticsReport | null>(null)
 
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
 
@@ -121,6 +124,11 @@ export default function App() {
     await vault.disconnect()
   }
 
+  const handleRunDiagnostics = async () => {
+    const report = await vault.diagnose()
+    if (report) setDiagnostics(report)
+  }
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-surface overflow-hidden">
       <div className="fixed inset-0 pointer-events-none">
@@ -145,6 +153,7 @@ export default function App() {
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
         onGenerateThumbnails={vault.generateThumbnails}
+        onRunDiagnostics={() => void handleRunDiagnostics()}
       />
 
       <div className="flex flex-1 min-w-0 flex-col lg:flex-row overflow-hidden">
@@ -230,6 +239,7 @@ export default function App() {
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
         onGenerateThumbnails={vault.generateThumbnails}
+        onRunDiagnostics={() => void handleRunDiagnostics()}
       />
 
       {selectedItem && !editing && (
@@ -265,6 +275,10 @@ export default function App() {
           onConfirm={() => void handleDisconnectConfirm()}
           onCancel={() => setDisconnectOpen(false)}
         />
+      )}
+
+      {diagnostics && (
+        <VaultDiagnosticsDialog report={diagnostics} onClose={() => setDiagnostics(null)} />
       )}
     </div>
   )

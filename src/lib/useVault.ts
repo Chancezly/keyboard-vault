@@ -25,6 +25,7 @@ import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
 import { assignItemFilePath, collectTakenBasenames } from './naming'
 import { hydrateBuildItems } from './builds'
 import { useNotifications } from '../features/notifications/notification'
+import { diagnoseVault, type VaultDiagnosticsReport } from './vaultDiagnostics'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -45,6 +46,7 @@ export interface VaultState {
   exportZip: () => Promise<void>
   importZip: (file: File) => Promise<void>
   generateThumbnails: () => Promise<void>
+  diagnose: () => Promise<VaultDiagnosticsReport | null>
   loadHero: (item: CollectionItem) => Promise<CollectionItem>
 }
 
@@ -315,6 +317,33 @@ export function useVault(): VaultState {
     }
   }, [mode, handle, notifications])
 
+  const diagnose = useCallback(async (): Promise<VaultDiagnosticsReport | null> => {
+    if (mode !== 'directory' || !handle) return null
+    setBusy(true)
+    const progressId = notifications.notify({
+      title: '正在诊断收藏库',
+      message: '只读检查文件和图片引用，请保持页面打开。',
+      tone: 'info',
+      duration: 0,
+    })
+    try {
+      const report = await diagnoseVault(handle)
+      if (report.issues.length === 0) {
+        notifications.success('收藏库诊断完成', '未发现完整性问题。')
+      } else {
+        notifications.info('收藏库诊断完成', `发现 ${report.issues.length} 个待检查项。`)
+      }
+      return report
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      notifications.error('收藏库诊断失败', message)
+      return null
+    } finally {
+      notifications.dismiss(progressId)
+      setBusy(false)
+    }
+  }, [mode, handle, notifications])
+
   return {
     items,
     mode,
@@ -330,6 +359,7 @@ export function useVault(): VaultState {
     exportZip,
     importZip,
     generateThumbnails,
+    diagnose,
     loadHero,
   }
 }

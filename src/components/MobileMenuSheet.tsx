@@ -9,6 +9,7 @@ import {
   Download,
   Upload,
   Images,
+  ScanSearch,
 } from 'lucide-react'
 interface MobileMenuSheetProps {
   open: boolean
@@ -30,6 +31,7 @@ interface MobileMenuSheetProps {
   onExportZip: () => void
   onImportZip: (file: File) => void
   onGenerateThumbnails: () => void
+  onRunDiagnostics: () => void
 }
 
 export function MobileMenuSheet({
@@ -47,6 +49,7 @@ export function MobileMenuSheet({
   onExportZip,
   onImportZip,
   onGenerateThumbnails,
+  onRunDiagnostics,
 }: MobileMenuSheetProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
 
@@ -185,6 +188,18 @@ export function MobileMenuSheet({
               >
                 <Images className="w-4 h-4" />
                 补齐旧缩略图
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRunDiagnostics()
+                  onClose()
+                }}
+                disabled={vaultBusy}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
+              >
+                <ScanSearch className="w-4 h-4" />
+                收藏库诊断
               </button>
             </>
           ) : (

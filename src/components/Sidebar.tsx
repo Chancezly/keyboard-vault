@@ -12,6 +12,7 @@ import {
   Download,
   Upload,
   Images,
+  ScanSearch,
   Heart,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
@@ -41,6 +42,7 @@ interface SidebarProps {
   onExportZip: () => void
   onImportZip: (file: File) => void
   onGenerateThumbnails: () => void
+  onRunDiagnostics: () => void
 }
 
 const NAV_ITEMS: { id: ItemCategory | 'all'; icon: typeof Keyboard; color: string }[] = [
@@ -68,6 +70,7 @@ export function Sidebar({
   onExportZip,
   onImportZip,
   onGenerateThumbnails,
+  onRunDiagnostics,
 }: SidebarProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
   return (
@@ -218,6 +221,16 @@ export function Sidebar({
             >
               <Images className="w-3.5 h-3.5" />
               <span>补齐旧缩略图</span>
+            </button>
+            <button
+              type="button"
+              onClick={onRunDiagnostics}
+              disabled={vaultBusy}
+              title="只读检查 Markdown、图片引用、重复 ID 和孤立资源"
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ScanSearch className="w-3.5 h-3.5" />
+              <span>收藏库诊断</span>
             </button>
           </>
         ) : (
