@@ -84,16 +84,36 @@ describe('vault image persistence', () => {
     item.filePath = '../../vault/keyboards/thumbnail-test.md'
     item.image = 'data:image/jpeg;base64,AQID'
     item.images = [item.image]
+    item.thumbnail = 'data:image/webp;base64,BAUG'
+
+    await writeItem(root as unknown as VaultHandle, item)
+
+    const thumbnails = (root.children.get('assets') as MemoryDirectory).children.get('thumbnails') as MemoryDirectory
+    expect(thumbnails.children.has('thumbnail-test-thumb.webp')).toBe(true)
+
+    const keyboards = root.children.get('keyboards') as MemoryDirectory
+    const markdown = keyboards.children.get('thumbnail-test.md') as MemoryFile
+    await expect(markdown.data.text()).resolves.toContain('thumbnail: thumbnail-test-thumb.webp')
+  })
+
+  it('keeps the JPEG extension when thumbnail generation falls back from WebP', async () => {
+    const root = new MemoryDirectory('vault')
+    const item = createBlankItem('keyboards')
+    item.name = 'JPEG Thumbnail Fallback'
+    item.filePath = 'keyboards/jpeg-thumbnail-fallback.md'
+    item.image = 'data:image/jpeg;base64,AQID'
+    item.images = [item.image]
     item.thumbnail = 'data:image/jpeg;base64,BAUG'
 
     await writeItem(root as unknown as VaultHandle, item)
 
     const thumbnails = (root.children.get('assets') as MemoryDirectory).children.get('thumbnails') as MemoryDirectory
-    expect(thumbnails.children.has('thumbnail-test-thumb.jpg')).toBe(true)
-
+    expect(thumbnails.children.has('jpeg-thumbnail-fallback-thumb.jpg')).toBe(true)
     const keyboards = root.children.get('keyboards') as MemoryDirectory
-    const markdown = keyboards.children.get('thumbnail-test.md') as MemoryFile
-    await expect(markdown.data.text()).resolves.toContain('thumbnail: thumbnail-test-thumb.jpg')
+    const markdown = keyboards.children.get('jpeg-thumbnail-fallback.md') as MemoryFile
+    await expect(markdown.data.text()).resolves.toContain(
+      'thumbnail: jpeg-thumbnail-fallback-thumb.jpg',
+    )
   })
 
   it('backfills only missing thumbnails and is safe to run again', async () => {
@@ -116,15 +136,15 @@ describe('vault image persistence', () => {
 
     const dependencies = {
       loadSource: async () => 'data:image/jpeg;base64,AQID',
-      createThumbnail: async () => 'data:image/jpeg;base64,BAUG',
+      createThumbnail: async () => 'data:image/webp;base64,BAUG',
     }
     const first = await generateMissingThumbnails(root as unknown as VaultHandle, dependencies)
     expect(first).toMatchObject({ scanned: 1, generated: 1, failed: 0 })
 
     const thumbnails = assets.children.get('thumbnails') as MemoryDirectory
-    expect(thumbnails.children.has('legacy-thumbnail-test-thumb.jpg')).toBe(true)
+    expect(thumbnails.children.has('legacy-thumbnail-test-thumb.webp')).toBe(true)
     await expect(markdown.data.text()).resolves.toContain(
-      'thumbnail: legacy-thumbnail-test-thumb.jpg',
+      'thumbnail: legacy-thumbnail-test-thumb.webp',
     )
 
     const second = await generateMissingThumbnails(root as unknown as VaultHandle, dependencies)

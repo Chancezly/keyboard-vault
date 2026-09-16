@@ -270,7 +270,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
     setImageError(null)
     setImageBusy(true)
     try {
-      // 统一转成 JPEG data URL（含手机 HEIC/HEIF），保证浏览器可显示、可落盘
+      // 主图统一转成 JPEG（含手机 HEIC/HEIF），首页缩略图单独生成 WebP。
       const normalized = await normalizeImageFile(file)
       const url = normalized.dataUrl
       const thumbnail = await createThumbnailDataUrl(url)

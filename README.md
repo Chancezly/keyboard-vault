@@ -73,7 +73,7 @@ vault/
 ├── switches/               # 轴体
 ├── builds/                 # 搭配
 ├── assets/images/          # 本地图片
-├── assets/thumbnails/      # 首页/列表缩略图（新上传图片自动生成）
+├── assets/thumbnails/      # 首页/列表缩略图（新生成优先使用 WebP）
 ├── settings/               # 用户偏好等
 └── ai/cache/               # AI 缓存（预留）
 ```

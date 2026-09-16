@@ -282,6 +282,11 @@ function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {
   return { ext, bytes }
 }
 
+function safeImageExtension(ext: string, fallback = 'jpg'): string {
+  const normalized = ext.toLowerCase().replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '')
+  return normalized || fallback
+}
+
 // ---- Read ----
 
 // 串行化：StrictMode / 保存等会并发触发 readVault，串行执行保证图片缓存构建期间不被并发清空。
@@ -427,7 +432,7 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
   if (ref.startsWith('data:')) {
     const decoded = decodeDataUrl(ref)
     if (!decoded) throw new Error('主图数据无效，无法写入本地')
-    const ext = decoded.ext === 'jpeg' ? 'jpg' : (decoded.ext.replace(/[^a-z0-9]/gi, '') || 'jpg')
+    const ext = safeImageExtension(decoded.ext)
     const fileName = `${targetBase}.${ext}`
     await writeImageFile(handle, fileName, decoded.bytes)
     return fileName
@@ -510,7 +515,7 @@ async function persistThumbnail(
   if (ref.startsWith('data:')) {
     const decoded = decodeDataUrl(ref)
     if (!decoded) throw new Error('缩略图数据无效，无法写入本地')
-    const fileName = `${itemImageBasename(item)}-thumb.jpg`
+    const fileName = `${itemImageBasename(item)}-thumb.${safeImageExtension(decoded.ext)}`
     await writeImageFile(handle, fileName, decoded.bytes, 'thumbnails')
     return fileName
   }
@@ -690,7 +695,7 @@ export async function generateMissingThumbnails(
         const decoded = decodeDataUrl(thumbnailDataUrl)
         if (!decoded) throw new Error('生成的缩略图数据无效')
 
-        const thumbnailName = `${basenameFromFilePath(item.filePath) ?? itemImageBasename(item)}-thumb.jpg`
+        const thumbnailName = `${basenameFromFilePath(item.filePath) ?? itemImageBasename(item)}-thumb.${safeImageExtension(decoded.ext)}`
         await writeImageFile(handle, thumbnailName, decoded.bytes, 'thumbnails')
         const writable = await fileHandle.createWritable()
         await writable.write(serializeItem({ ...item, thumbnail: thumbnailName }))

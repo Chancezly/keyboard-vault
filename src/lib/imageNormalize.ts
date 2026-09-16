@@ -79,14 +79,33 @@ async function blobToBytes(blob: Blob): Promise<Uint8Array> {
   return new Uint8Array(await blob.arrayBuffer())
 }
 
-function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: 'image/jpeg' | 'image/webp',
+  quality: number,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('图片导出失败'))),
-      'image/jpeg',
+      (blob) => {
+        if (!blob) {
+          reject(new Error('图片导出失败'))
+          return
+        }
+        // 旧浏览器可能忽略 WebP 参数并返回 PNG，不能将其误存为 .webp。
+        if (type === 'image/webp' && blob.type !== 'image/webp') {
+          reject(new Error('当前浏览器不支持 WebP 导出'))
+          return
+        }
+        resolve(blob)
+      },
+      type,
       quality,
     )
   })
+}
+
+function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return canvasToBlob(canvas, 'image/jpeg', quality)
 }
 
 function loadHtmlImage(url: string): Promise<HTMLImageElement> {
@@ -249,6 +268,15 @@ export async function heicToJpegBlob(blob: Blob, quality = 0.9): Promise<Blob> {
 
 /** 压缩到最长边 maxEdge，输出 JPEG */
 export async function compressToJpeg(blob: Blob, maxEdge = 2048, quality = 0.88): Promise<Blob> {
+  return compressWithCanvas(blob, maxEdge, quality, 'image/jpeg')
+}
+
+async function compressWithCanvas(
+  blob: Blob,
+  maxEdge: number,
+  quality: number,
+  type: 'image/jpeg' | 'image/webp',
+): Promise<Blob> {
   const url = URL.createObjectURL(blob)
   try {
     const img = await loadHtmlImage(url)
@@ -263,10 +291,15 @@ export async function compressToJpeg(blob: Blob, maxEdge = 2048, quality = 0.88)
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('无法处理图片')
     ctx.drawImage(img, 0, 0, width, height)
-    return await canvasToJpeg(canvas, quality)
+    return await canvasToBlob(canvas, type, quality)
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+/** 压缩到最长边 maxEdge，输出 WebP。 */
+export async function compressToWebp(blob: Blob, maxEdge = 640, quality = 0.74): Promise<Blob> {
+  return compressWithCanvas(blob, maxEdge, quality, 'image/webp')
 }
 
 export interface NormalizedImage {
@@ -332,7 +365,7 @@ export async function normalizeImageFile(
   return { dataUrl, bytes, ext: 'jpg', mime: 'image/jpeg' }
 }
 
-/** 从已可显示的图片引用生成首页缩略图，不改变主图。 */
+/** 从已可显示的图片引用生成首页缩略图，不改变主图。优先 WebP，旧浏览器回退 JPEG。 */
 export async function createThumbnailDataUrl(
   source: string,
   maxEdge = 640,
@@ -341,7 +374,10 @@ export async function createThumbnailDataUrl(
   if (!source) return ''
   const response = await fetch(source)
   if (!response.ok) throw new Error('无法读取图片以生成缩略图')
-  const thumbnail = await compressToJpeg(await response.blob(), maxEdge, quality)
+  const sourceBlob = await response.blob()
+  const thumbnail = await compressToWebp(sourceBlob, maxEdge, quality).catch(() =>
+    compressToJpeg(sourceBlob, maxEdge, quality),
+  )
   return blobToDataUrl(thumbnail)
 }
 
