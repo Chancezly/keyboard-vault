@@ -135,6 +135,17 @@ export default function App() {
     if (report) setDiagnostics(report)
   }
 
+  const handleCleanOrphans = async () => {
+    if (!diagnostics) return
+    const paths = diagnostics.issues
+      .filter((issue) => issue.code === 'orphan-image' || issue.code === 'orphan-thumbnail')
+      .map((issue) => issue.path)
+    if (!paths.length) return
+    if (!window.confirm(`将永久删除 ${paths.length} 个未被当前资料或历史记录引用的图片文件。建议先备份，是否继续？`)) return
+    const report = await vault.cleanOrphanResources(paths)
+    if (report) setDiagnostics(report)
+  }
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-surface overflow-hidden">
       <div className="fixed inset-0 pointer-events-none">
@@ -288,6 +299,7 @@ export default function App() {
           report={diagnostics}
           onClose={() => setDiagnostics(null)}
           onRepairDuplicateIds={handleRepairDuplicateIds}
+          onCleanOrphans={handleCleanOrphans}
         />
       )}
     </div>

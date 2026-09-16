@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { AlertTriangle, CheckCircle2, FileText, HardDrive, Image, Images, Wrench, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, HardDrive, Image, Images, Trash2, Wrench, X } from 'lucide-react'
 import type { VaultDiagnosticsReport } from '../lib/vaultDiagnostics'
 
 interface VaultDiagnosticsDialogProps {
   report: VaultDiagnosticsReport
   onClose: () => void
   onRepairDuplicateIds: () => Promise<void>
+  onCleanOrphans: () => Promise<void>
 }
 
 function formatBytes(bytes: number): string {
@@ -15,8 +16,9 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`
 }
 
-export function VaultDiagnosticsDialog({ report, onClose, onRepairDuplicateIds }: VaultDiagnosticsDialogProps) {
+export function VaultDiagnosticsDialog({ report, onClose, onRepairDuplicateIds, onCleanOrphans }: VaultDiagnosticsDialogProps) {
   const [repairing, setRepairing] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
   const errorCount = report.issues.filter((issue) => issue.severity === 'error').length
   const warningCount = report.issues.length - errorCount
   const cards = [
@@ -134,6 +136,24 @@ export function VaultDiagnosticsDialog({ report, onClose, onRepairDuplicateIds }
             >
               <Wrench className="h-3.5 w-3.5" />
               {repairing ? '正在修复…' : '修复重复 ID'}
+            </button>
+          )}
+          {report.counts.orphanResources > 0 && (
+            <button
+              type="button"
+              disabled={cleaning}
+              onClick={async () => {
+                setCleaning(true)
+                try {
+                  await onCleanOrphans()
+                } finally {
+                  setCleaning(false)
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-red-400/15 px-4 py-2 text-sm text-red-300 hover:bg-red-400/20 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {cleaning ? '正在清理…' : `清理孤立资源（${report.counts.orphanResources}）`}
             </button>
           )}
           <button type="button" onClick={onClose} className="rounded-xl bg-white/[0.08] px-4 py-2 text-sm hover:bg-white/[0.12]">

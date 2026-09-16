@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createBlankItem } from './store'
 import { serializeItem } from './serialize'
-import { repairDuplicateIds } from './vaultMaintenance'
+import { removeOrphanResources, repairDuplicateIds } from './vaultMaintenance'
 import type { VaultHandle } from './fs'
 
 class MemoryFile {
@@ -41,6 +41,9 @@ class MemoryDirectory {
     if (entry?.kind !== 'directory') throw new Error('not found')
     return entry
   }
+  async removeEntry(name: string) {
+    if (!this.children.delete(name)) throw new Error('not found')
+  }
   async *entries() { yield* this.children.entries() }
 }
 
@@ -79,5 +82,29 @@ describe('duplicate ID repair', () => {
 
     await expect(repairDuplicateIds(root as unknown as VaultHandle)).resolves.toEqual([])
     await expect(only.data.text()).resolves.toBe(before)
+  })
+})
+
+describe('orphan resource cleanup', () => {
+  it('only removes explicitly listed files from approved image directories', async () => {
+    const root = new MemoryDirectory('vault')
+    const assets = root.directory('assets')
+    const images = assets.directory('images')
+    const thumbnails = assets.directory('thumbnails')
+    images.file('orphan.jpg', 'orphan')
+    images.file('keep.jpg', 'keep')
+    thumbnails.file('orphan.webp', 'orphan')
+
+    const result = await removeOrphanResources(root as unknown as VaultHandle, [
+      'assets/images/orphan.jpg',
+      'assets/thumbnails/orphan.webp',
+      'keyboards/item.md',
+      'assets/images/../keep.jpg',
+    ])
+
+    expect(result.removed).toEqual(['assets/images/orphan.jpg', 'assets/thumbnails/orphan.webp'])
+    expect(result.failed).toHaveLength(2)
+    expect(images.children.has('orphan.jpg')).toBe(false)
+    expect(images.children.has('keep.jpg')).toBe(true)
   })
 })

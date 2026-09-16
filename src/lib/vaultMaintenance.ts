@@ -18,6 +18,7 @@ interface WritableFileHandle {
 interface WritableDirectoryHandle {
   getDirectoryHandle: (name: string) => Promise<WritableDirectoryHandle>
   entries: () => AsyncIterableIterator<[string, WritableFileHandle | { kind: 'directory'; name: string }]>
+  removeEntry: (name: string) => Promise<void>
 }
 
 interface ParsedRecord {
@@ -31,6 +32,11 @@ export interface DuplicateIdRepair {
   path: string
   previousId: string
   nextId: string
+}
+
+export interface OrphanCleanupResult {
+  removed: string[]
+  failed: { path: string; message: string }[]
 }
 
 function idSuffix(path: string): string {
@@ -104,4 +110,33 @@ export async function repairDuplicateIds(handle: VaultHandle): Promise<Duplicate
   }
 
   return repairs
+}
+
+/** 仅删除诊断结果明确给出的 assets/images 或 assets/thumbnails 单层文件。 */
+export async function removeOrphanResources(
+  handle: VaultHandle,
+  paths: string[],
+): Promise<OrphanCleanupResult> {
+  const root = handle as unknown as WritableDirectoryHandle
+  const removed: string[] = []
+  const failed: OrphanCleanupResult['failed'] = []
+  const uniquePaths = Array.from(new Set(paths.map((path) => path.normalize('NFC'))))
+
+  for (const path of uniquePaths) {
+    const match = path.match(/^assets\/(images|thumbnails)\/([^/]+)$/)
+    if (!match || match[2] === '.' || match[2] === '..') {
+      failed.push({ path, message: '路径不在允许清理的图片目录中' })
+      continue
+    }
+    try {
+      const assets = await root.getDirectoryHandle('assets')
+      const directory = await assets.getDirectoryHandle(match[1])
+      await directory.removeEntry(match[2])
+      removed.push(path)
+    } catch (error) {
+      failed.push({ path, message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  return { removed, failed }
 }

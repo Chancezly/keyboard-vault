@@ -27,7 +27,10 @@ import { assignItemFilePath, collectTakenBasenames } from './naming'
 import { hydrateBuildItems } from './builds'
 import { useNotifications } from '../features/notifications/notification'
 import { diagnoseVault, type VaultDiagnosticsReport } from './vaultDiagnostics'
-import { repairDuplicateIds as repairDuplicateVaultIds } from './vaultMaintenance'
+import {
+  removeOrphanResources,
+  repairDuplicateIds as repairDuplicateVaultIds,
+} from './vaultMaintenance'
 import { enqueueVaultWrite } from './vaultWriteQueue'
 
 export type VaultMode = 'bundled' | 'directory'
@@ -51,6 +54,7 @@ export interface VaultState {
   generateThumbnails: () => Promise<void>
   diagnose: () => Promise<VaultDiagnosticsReport | null>
   repairDuplicateIds: () => Promise<VaultDiagnosticsReport | null>
+  cleanOrphanResources: (paths: string[]) => Promise<VaultDiagnosticsReport | null>
   loadHero: (item: CollectionItem) => Promise<CollectionItem>
 }
 
@@ -405,6 +409,34 @@ export function useVault(): VaultState {
     }
   }, [mode, handle, readDirectory, notifications])
 
+  const cleanOrphanResources = useCallback(async (
+    paths: string[],
+  ): Promise<VaultDiagnosticsReport | null> => {
+    if (mode !== 'directory' || !handle) return null
+    setBusy(true)
+    try {
+      const result = await enqueueVaultWrite(
+        handle,
+        () => removeOrphanResources(handle, paths),
+      )
+      if (result.failed.length > 0) {
+        notifications.error(
+          '部分孤立资源清理失败',
+          `已清理 ${result.removed.length} 个，失败 ${result.failed.length} 个：${result.failed[0].path}`,
+        )
+      } else {
+        notifications.success('孤立资源已清理', `共删除 ${result.removed.length} 个未引用文件。`)
+      }
+      return await diagnoseVault(handle)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      notifications.error('孤立资源清理失败', message)
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }, [mode, handle, notifications])
+
   return {
     items,
     mode,
@@ -422,6 +454,7 @@ export function useVault(): VaultState {
     generateThumbnails,
     diagnose,
     repairDuplicateIds,
+    cleanOrphanResources,
     loadHero,
   }
 }
