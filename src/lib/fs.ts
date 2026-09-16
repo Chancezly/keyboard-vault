@@ -327,11 +327,23 @@ function invalidateMarkdownItem(handle: VaultHandle, filePath: string): void {
 // 串行化：StrictMode / 保存等会并发触发 readVault，串行执行保证图片缓存构建期间不被并发清空。
 let readVaultChain: Promise<unknown> = Promise.resolve()
 
-export function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
+export interface VaultReadIssue {
+  filePath: string
+  message: string
+}
+
+export interface ReadVaultOptions {
+  onIssue?: (issue: VaultReadIssue) => void
+}
+
+export function readVault(
+  handle: VaultHandle,
+  options: ReadVaultOptions = {},
+): Promise<CollectionItem[]> {
   const readOnce = async () => {
     const resumeEviction = suspendVaultImageEviction()
     try {
-      return await doReadVault(handle)
+      return await doReadVault(handle, options)
     } finally {
       resumeEviction()
     }
@@ -347,7 +359,10 @@ export function readVault(handle: VaultHandle): Promise<CollectionItem[]> {
   return run
 }
 
-async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
+async function doReadVault(
+  handle: VaultHandle,
+  options: ReadVaultOptions,
+): Promise<CollectionItem[]> {
   // 重新构建图片缓存。首页只按 Markdown 引用读取缩略图，不扫描或解码原图。
   imageByName = new Map()
   nameByDisplayUrl = new Map()
@@ -366,30 +381,38 @@ async function doReadVault(handle: VaultHandle): Promise<CollectionItem[]> {
       if (entry.kind !== 'file' || !name.endsWith('.md')) continue
       const filePath = `${category}/${name}`
       seenMarkdown.add(filePath)
-      const file = await (entry as FileSystemFileHandleLike).getFile()
-      const cached = markdownCache.get(filePath)
-      let item: CollectionItem
-      if (
-        cached &&
-        cached.size === file.size &&
-        cached.lastModified === file.lastModified
-      ) {
-        item = cloneCachedItem(cached.item)
-      } else {
-        const raw = await file.text()
-        item = parseItemMarkdown(raw, category, filePath)
-        rememberMarkdownItem(handle, filePath, file, item)
-      }
-      const rawThumbnail = item.thumbnail
-      // 保留原图文件名供详情/编辑按需读取，不在首页生成显示 URL。
-      item.image = item.images[0] ?? ''
-      item.thumbnail = resolveImage(rawThumbnail ?? '')
+      try {
+        const file = await (entry as FileSystemFileHandleLike).getFile()
+        const cached = markdownCache.get(filePath)
+        let item: CollectionItem
+        if (
+          cached &&
+          cached.size === file.size &&
+          cached.lastModified === file.lastModified
+        ) {
+          item = cloneCachedItem(cached.item)
+        } else {
+          const raw = await file.text()
+          item = parseItemMarkdown(raw, category, filePath)
+          rememberMarkdownItem(handle, filePath, file, item)
+        }
+        const rawThumbnail = item.thumbnail
+        // 保留原图文件名供详情/编辑按需读取，不在首页生成显示 URL。
+        item.image = item.images[0] ?? ''
+        item.thumbnail = resolveImage(rawThumbnail ?? '')
 
-      if (rawThumbnail && !item.thumbnail) {
-        item.thumbnail = await loadImageByName(handle, rawThumbnail, 'thumbnails') ?? undefined
-      }
+        if (rawThumbnail && !item.thumbnail) {
+          item.thumbnail = await loadImageByName(handle, rawThumbnail, 'thumbnails') ?? undefined
+        }
 
-      items.push(item)
+        items.push(item)
+      } catch (error) {
+        markdownCache.delete(filePath)
+        options.onIssue?.({
+          filePath,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
   }
 

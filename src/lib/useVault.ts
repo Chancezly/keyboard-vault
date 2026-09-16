@@ -19,6 +19,7 @@ import {
   loadItemHero,
   stabilizeImageRefs,
   type VaultHandle,
+  type VaultReadIssue,
 } from './fs'
 import { isVaultBrowserSupported } from './vaultCapabilities'
 import { hydrateImageCache, persistHeroToImageStore } from './imageStore'
@@ -85,11 +86,24 @@ export function useVault(): VaultState {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }, [])
 
+  const readDirectory = useCallback(async (h: VaultHandle): Promise<CollectionItem[]> => {
+    const issues: VaultReadIssue[] = []
+    const loaded = await readVault(h, { onIssue: (issue) => issues.push(issue) })
+    if (issues.length > 0) {
+      const first = issues[0]
+      notifications.error(
+        `已隔离 ${issues.length} 个损坏文件`,
+        `${first.filePath}：${first.message}${issues.length > 1 ? '；其余问题可在收藏库诊断中查看。' : ''}`,
+      )
+    }
+    return loaded
+  }, [notifications])
+
   const loadFromHandle = useCallback(async (h: VaultHandle): Promise<boolean> => {
     setBusy(true)
     try {
       await ensureVaultStructure(h)
-      const loaded = await readVault(h)
+      const loaded = await readDirectory(h)
       setHandle(h)
       setMode('directory')
       setItems(loaded)
@@ -103,7 +117,7 @@ export function useVault(): VaultState {
     } finally {
       setBusy(false)
     }
-  }, [notifications])
+  }, [readDirectory, notifications])
 
   // Try to restore a previously connected directory on first load.
   useEffect(() => {
@@ -160,7 +174,7 @@ export function useVault(): VaultState {
     setBusy(true)
     try {
       if (mode === 'directory' && handle) {
-        setItems(await readVault(handle))
+        setItems(await readDirectory(handle))
       } else {
         setItems(getBundledItems())
       }
@@ -171,7 +185,7 @@ export function useVault(): VaultState {
     } finally {
       setBusy(false)
     }
-  }, [mode, handle, notifications])
+  }, [mode, handle, readDirectory, notifications])
 
   const loadHero = useCallback(async (item: CollectionItem): Promise<CollectionItem> => {
     if (mode === 'directory' && handle) return loadItemHero(handle, item)
@@ -223,7 +237,7 @@ export function useVault(): VaultState {
         setBusy(true)
         try {
           await deleteItemFile(handle, item)
-          setItems(await readVault(handle))
+          setItems(await readDirectory(handle))
           notifications.success('收藏已删除', item.name)
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
@@ -237,7 +251,7 @@ export function useVault(): VaultState {
         notifications.success('收藏已删除', item.name)
       }
     },
-    [mode, handle, notifications],
+    [mode, handle, readDirectory, notifications],
   )
 
   const exportZip = useCallback(async () => {
@@ -269,7 +283,7 @@ export function useVault(): VaultState {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
         downloadBackup(before, `${handle.name || 'vault'}-before-restore-${stamp}.zip`)
         await importVaultZip(handle, file)
-        setItems(await readVault(handle))
+        setItems(await readDirectory(handle))
         notifications.success('收藏库恢复完成', '恢复前的原数据已自动下载备份。')
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
@@ -278,7 +292,7 @@ export function useVault(): VaultState {
         setBusy(false)
       }
     },
-    [mode, handle, downloadBackup, notifications],
+    [mode, handle, downloadBackup, readDirectory, notifications],
   )
 
   const generateThumbnails = useCallback(async () => {
@@ -292,7 +306,7 @@ export function useVault(): VaultState {
     })
     try {
       const result = await generateMissingThumbnails(handle)
-      if (result.generated > 0) setItems(await readVault(handle))
+      if (result.generated > 0) setItems(await readDirectory(handle))
 
       if (result.failed > 0) {
         const summary = `已生成 ${result.generated} 张，失败 ${result.failed} 张。${result.errors[0]?.message ?? ''}`
@@ -315,7 +329,7 @@ export function useVault(): VaultState {
       notifications.dismiss(progressId)
       setBusy(false)
     }
-  }, [mode, handle, notifications])
+  }, [mode, handle, readDirectory, notifications])
 
   const diagnose = useCallback(async (): Promise<VaultDiagnosticsReport | null> => {
     if (mode !== 'directory' || !handle) return null

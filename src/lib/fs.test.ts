@@ -94,6 +94,30 @@ describe('vault ZIP restore', () => {
 })
 
 describe('vault image persistence', () => {
+  it('isolates a broken Markdown file and continues loading valid items', async () => {
+    const root = new MemoryDirectory('vault')
+    const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
+    const validItem = createBlankItem('keyboards')
+    validItem.id = 'valid-after-broken'
+    validItem.name = 'Valid Item'
+    validItem.filePath = 'keyboards/valid.md'
+    const valid = await keyboards.getFileHandle('valid.md', { create: true })
+    valid.data = new Blob([serializeItem(validItem)], { type: 'text/markdown' })
+    const broken = await keyboards.getFileHandle('broken.md', { create: true })
+    broken.data = new Blob(['---\nidentity: [\n---\n'], { type: 'text/markdown' })
+    const issues: { filePath: string; message: string }[] = []
+
+    const loaded = await readVault(root as unknown as VaultHandle, {
+      onIssue: (issue) => issues.push(issue),
+    })
+
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0].id).toBe('valid-after-broken')
+    expect(issues).toHaveLength(1)
+    expect(issues[0].filePath).toBe('keyboards/broken.md')
+    expect(issues[0].message).toBeTruthy()
+  })
+
   it('reuses one stable Blob URL for an unchanged local thumbnail', async () => {
     const root = new MemoryDirectory('vault')
     const keyboards = await root.getDirectoryHandle('keyboards', { create: true })
