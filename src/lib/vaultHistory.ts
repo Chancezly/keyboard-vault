@@ -1,6 +1,7 @@
 import type { CollectionItem } from './types'
 import type { VaultHandle } from './fs'
 import { basenameFromFilePath } from './naming'
+import { parseItemMarkdown } from './parser'
 
 interface F {
   kind: 'file'
@@ -12,7 +13,8 @@ interface F {
   }>
 }
 interface D {kind:'directory';name:string;getDirectoryHandle:(n:string,o?:{create?:boolean})=>Promise<D>;getFileHandle:(n:string,o?:{create?:boolean})=>Promise<F>;removeEntry:(n:string)=>Promise<void>;entries:()=>AsyncIterableIterator<[string,F|D]>}
-export interface HistoryVersion { itemId:string; fileName:string; savedAt:string; size:number }
+export interface HistoryVersion { itemId:string; fileName:string; savedAt:string; size:number; raw:string }
+export interface HistoryDescription { name:string; status:string; hero:string; imageCount:number; contentPreview:string; changes:string[] }
 const safe=(value:string)=>value.replace(/[/\\:*?"<>|]/g,'-')||'item'
 
 export async function archiveExistingItem(handle:VaultHandle,item:Pick<CollectionItem,'id'|'category'|'filePath'>):Promise<void>{
@@ -31,8 +33,22 @@ export async function archiveExistingItem(handle:VaultHandle,item:Pick<Collectio
 export async function listHistory(handle:VaultHandle):Promise<HistoryVersion[]>{
   const root=handle as unknown as D;let history:D;try{history=await root.getDirectoryHandle('.history')}catch{return[]}
   const result:HistoryVersion[]=[]
-  for await(const [itemId,entry] of history.entries()){if(entry.kind!=='directory')continue;for await(const [fileName,fileEntry] of entry.entries()){if(fileEntry.kind!=='file'||!fileName.endsWith('.md'))continue;const file=await fileEntry.getFile();result.push({itemId,fileName,savedAt:fileName.replace(/\.md$/,''),size:file.size})}}
+  for await(const [itemId,entry] of history.entries()){if(entry.kind!=='directory')continue;for await(const [fileName,fileEntry] of entry.entries()){if(fileEntry.kind!=='file'||!fileName.endsWith('.md'))continue;const file=await fileEntry.getFile();const raw=await file.text();const stamp=fileName.replace(/\.md$/,'');const savedAt=stamp.replace(/^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3}Z)$/,'$1:$2:$3.$4');result.push({itemId,fileName,savedAt,size:file.size,raw})}}
   return result.sort((a,b)=>b.fileName.localeCompare(a.fileName))
+}
+
+export function describeHistoryVersion(version:HistoryVersion,current:CollectionItem):HistoryDescription{
+  const historical=parseItemMarkdown(version.raw,current.category,`history/${version.fileName}`)
+  const changes:string[]=[]
+  if(historical.name!==current.name)changes.push(`名称：${historical.name || '未命名'} → ${current.name || '未命名'}`)
+  if(historical.status!==current.status)changes.push(`状态：${historical.status} → ${current.status}`)
+  if(historical.images[0]!==current.images[0])changes.push('主图已更换')
+  if(historical.images.length!==current.images.length)changes.push(`图片数量：${historical.images.length} → ${current.images.length}`)
+  if(historical.price!==current.price)changes.push(`价格：${historical.price ?? '未填写'} → ${current.price ?? '未填写'}`)
+  if(historical.content.trim()!==current.content.trim())changes.push('备注内容已修改')
+  const specs=['layout','mount','plate','material','profile','switchType','color'] as const
+  if(specs.some(key=>historical[key]!==current[key]))changes.push('规格参数已修改')
+  return {name:historical.name,status:historical.status,hero:historical.images[0]??'',imageCount:historical.images.length,contentPreview:historical.content.trim().slice(0,180),changes:changes.length?changes:['与当前可识别字段一致']}
 }
 
 export async function restoreHistory(handle:VaultHandle,item:CollectionItem,version:HistoryVersion):Promise<void>{

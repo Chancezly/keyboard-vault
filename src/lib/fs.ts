@@ -520,9 +520,21 @@ function itemImageBasename(item: CollectionItem): string {
   return basenameFromFilePath(item.filePath) ?? itemDisplayBasename(item)
 }
 
-async function persistImage(handle: VaultHandle, item: CollectionItem, ref: string, index: number): Promise<string | null> {
-  const baseName = itemImageBasename(item)
-  const targetBase = index === 0 ? baseName : `${baseName}-gallery-${index}`
+async function imageContentToken(bytes: Uint8Array): Promise<string> {
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes as unknown as BufferSource)
+    return Array.from(new Uint8Array(digest).slice(0, 8), (value) => value.toString(16).padStart(2, '0')).join('')
+  }
+  let hash = 2166136261
+  for (const value of bytes) hash = Math.imul(hash ^ value, 16777619)
+  return `${bytes.length.toString(16)}${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+async function immutableImageName(item: CollectionItem, bytes: Uint8Array, ext: string): Promise<string> {
+  return `${itemImageBasename(item)}-img-${await imageContentToken(bytes)}.${safeImageExtension(ext)}`
+}
+
+async function persistImage(handle: VaultHandle, item: CollectionItem, ref: string): Promise<string | null> {
 
   // 显示 URL 若能还原成已有文件名，直接复用，避免重复写盘
   const knownName = nameByDisplayUrl.get(ref)
@@ -531,8 +543,7 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
   if (ref.startsWith('data:')) {
     const decoded = decodeDataUrl(ref)
     if (!decoded) throw new Error('主图数据无效，无法写入本地')
-    const ext = safeImageExtension(decoded.ext)
-    const fileName = `${targetBase}.${ext}`
+    const fileName = await immutableImageName(item, decoded.bytes, decoded.ext)
     await writeImageFile(handle, fileName, decoded.bytes)
     return fileName
   }
@@ -544,7 +555,7 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
       const bytes = new Uint8Array(await res.arrayBuffer())
       const mime = res.headers.get('content-type') || 'image/jpeg'
       const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
-      const fileName = `${targetBase}.${ext}`
+      const fileName = await immutableImageName(item, bytes, ext)
       await writeImageFile(handle, fileName, bytes)
       return fileName
     } catch (e) {
@@ -556,7 +567,7 @@ async function persistImage(handle: VaultHandle, item: CollectionItem, ref: stri
   if (/^(https?:)?\/\//.test(ref)) {
     const fetched = await fetchRemoteImage(ref)
     if (fetched) {
-      const fileName = `${targetBase}.${fetched.ext}`
+      const fileName = await immutableImageName(item, fetched.bytes, fetched.ext)
       await writeImageFile(handle, fileName, fetched.bytes)
       return fileName
     }
@@ -574,7 +585,7 @@ async function persistImages(handle: VaultHandle, item: CollectionItem): Promise
   const refs = item.images.length ? item.images : item.image ? [item.image] : []
   const persisted: string[] = []
   for (let i = 0; i < refs.length; i++) {
-    const fileName = await persistImage(handle, item, refs[i], i)
+    const fileName = await persistImage(handle, item, refs[i])
     if (!fileName) throw new Error(`第 ${i + 1} 张图片无法写入本地`)
     persisted.push(fileName)
   }

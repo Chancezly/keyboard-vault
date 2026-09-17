@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { generateMissingThumbnails, importVaultZip, loadItemHero, readVault, writeItem, type VaultHandle } from './fs'
 import { serializeItem } from './serialize'
 import { createBlankItem } from './store'
-import { listHistory } from './vaultHistory'
+import { describeHistoryVersion, listHistory } from './vaultHistory'
 
 class MemoryFile {
   kind = 'file' as const
@@ -122,6 +122,9 @@ describe('vault image persistence', () => {
     const versions = await listHistory(root as unknown as VaultHandle)
     expect(versions).toHaveLength(1)
     expect(versions[0].itemId).toBe('history-item')
+    const description = describeHistoryVersion(versions[0], { ...item, name: 'After', images: ['new.jpg'], image: 'new.jpg' })
+    expect(description.changes).toEqual(expect.arrayContaining(['名称：Before → After', '主图已更换']))
+    expect(new Date(versions[0].savedAt).getTime()).not.toBeNaN()
   })
 
   it('isolates a broken Markdown file and continues loading valid items', async () => {
@@ -261,6 +264,34 @@ describe('vault image persistence', () => {
     const keyboards = root.children.get('keyboards') as MemoryDirectory
     const markdown = keyboards.children.get('thumbnail-test.md') as MemoryFile
     await expect(markdown.data.text()).resolves.toContain('thumbnail: thumbnail-test-thumb.webp')
+  })
+
+  it('keeps immutable original files when gallery order and main image change', async () => {
+    const root = new MemoryDirectory('vault')
+    const item = createBlankItem('keyboards')
+    item.id = 'immutable-gallery'
+    item.name = 'Immutable Gallery'
+    item.filePath = 'keyboards/immutable-gallery.md'
+    item.images = [
+      'data:image/jpeg;base64,AQID',
+      'data:image/jpeg;base64,BAUG',
+      'data:image/jpeg;base64,BwgJ',
+    ]
+    item.image = item.images[0]
+    item.thumbnail = 'data:image/webp;base64,CgsM'
+
+    const first = await writeItem(root as unknown as VaultHandle, item)
+    const reordered = await writeItem(root as unknown as VaultHandle, {
+      ...first,
+      images: [first.images[2], first.images[0], first.images[1]],
+      image: first.images[2],
+    }, first)
+
+    expect(reordered.images).toEqual([first.images[2], first.images[0], first.images[1]])
+    expect(new Set(reordered.images).size).toBe(3)
+    const assets = root.children.get('assets') as MemoryDirectory
+    const images = assets.children.get('images') as MemoryDirectory
+    expect(Array.from(images.children.keys()).filter((name) => name.includes('-img-'))).toHaveLength(3)
   })
 
   it('keeps the JPEG extension when thumbnail generation falls back from WebP', async () => {
