@@ -9,6 +9,7 @@ import { DisconnectDialog } from './components/DisconnectDialog'
 import { MobileTabBar } from './components/MobileTabBar'
 import { MobileMenuSheet } from './components/MobileMenuSheet'
 import { VaultDiagnosticsDialog } from './components/VaultDiagnosticsDialog'
+import { PreferencesDialog } from './components/PreferencesDialog'
 import { CollectionContent } from './features/collection/CollectionContent'
 import { useCollectionView } from './features/collection/useCollectionView'
 import { createBlankItem } from './lib/store'
@@ -36,7 +37,6 @@ export default function App() {
     filteredItems,
     stats,
     allTags,
-    preferences,
     studioSuggestions,
   } = collection
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null)
@@ -47,6 +47,7 @@ export default function App() {
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [diagnostics, setDiagnostics] = useState<VaultDiagnosticsReport | null>(null)
+  const [preferencesOpen, setPreferencesOpen] = useState(false)
 
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
 
@@ -171,6 +172,7 @@ export default function App() {
         onImportZip={vault.importZip}
         onGenerateThumbnails={vault.generateThumbnails}
         onRunDiagnostics={() => void handleRunDiagnostics()}
+        onOpenPreferences={() => setPreferencesOpen(true)}
       />
 
       <div className="flex flex-1 min-w-0 flex-col lg:flex-row overflow-hidden">
@@ -222,7 +224,7 @@ export default function App() {
           open={aiOpen}
           onClose={() => setAiOpen(false)}
           items={items}
-          preferences={preferences}
+          preferences={vault.preferences}
           allTags={allTags}
           selectedItem={selectedItem}
           readOnly={readOnly}
@@ -257,6 +259,7 @@ export default function App() {
         onImportZip={vault.importZip}
         onGenerateThumbnails={vault.generateThumbnails}
         onRunDiagnostics={() => void handleRunDiagnostics()}
+        onOpenPreferences={() => setPreferencesOpen(true)}
       />
 
       {selectedItem && !editing && (
@@ -301,6 +304,9 @@ export default function App() {
           onRepairDuplicateIds={handleRepairDuplicateIds}
           onCleanOrphans={handleCleanOrphans}
         />
+      )}
+      {preferencesOpen && (
+        <PreferencesDialog preferences={vault.preferences} onClose={() => setPreferencesOpen(false)} onSave={async (next) => { await vault.savePreferences(next); setPreferencesOpen(false) }} />
       )}
     </div>
   )

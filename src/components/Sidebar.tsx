@@ -14,6 +14,7 @@ import {
   Images,
   ScanSearch,
   Heart,
+  Settings2,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
 import { CATEGORY_LABELS } from '../lib/types'
@@ -43,6 +44,7 @@ interface SidebarProps {
   onImportZip: (file: File) => void
   onGenerateThumbnails: () => void
   onRunDiagnostics: () => void
+  onOpenPreferences: () => void
 }
 
 const NAV_ITEMS: { id: ItemCategory | 'all'; icon: typeof Keyboard; color: string }[] = [
@@ -71,6 +73,7 @@ export function Sidebar({
   onImportZip,
   onGenerateThumbnails,
   onRunDiagnostics,
+  onOpenPreferences,
 }: SidebarProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
   return (
@@ -231,6 +234,9 @@ export function Sidebar({
             >
               <ScanSearch className="w-3.5 h-3.5" />
               <span>收藏库诊断</span>
+            </button>
+            <button type="button" onClick={onOpenPreferences} disabled={vaultBusy} className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary disabled:opacity-40">
+              <Settings2 className="w-3.5 h-3.5"/><span>偏好设置</span>
             </button>
           </>
         ) : (

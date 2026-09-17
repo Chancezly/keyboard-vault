@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { CollectionItem } from './types'
+import type { CollectionItem, UserPreferences } from './types'
 import {
   getBundledItems,
   upsertItem as upsertLocal,
@@ -32,11 +32,14 @@ import {
   repairDuplicateIds as repairDuplicateVaultIds,
 } from './vaultMaintenance'
 import { enqueueVaultWrite } from './vaultWriteQueue'
+import { readVaultPreferences, writeVaultPreferences } from './vaultPreferences'
+import { loadPreferences } from './collection'
 
 export type VaultMode = 'bundled' | 'directory'
 
 export interface VaultState {
   items: CollectionItem[]
+  preferences: UserPreferences
   mode: VaultMode
   /** 是否可连接并写入本地文件夹（Chrome / Edge） */
   supported: boolean
@@ -55,6 +58,7 @@ export interface VaultState {
   diagnose: () => Promise<VaultDiagnosticsReport | null>
   repairDuplicateIds: () => Promise<VaultDiagnosticsReport | null>
   cleanOrphanResources: (paths: string[]) => Promise<VaultDiagnosticsReport | null>
+  savePreferences: (preferences: UserPreferences) => Promise<void>
   loadHero: (item: CollectionItem) => Promise<CollectionItem>
 }
 
@@ -78,6 +82,7 @@ function upsertCollectionItem(items: CollectionItem[], saved: CollectionItem): C
 export function useVault(): VaultState {
   const notifications = useNotifications()
   const [items, setItems] = useState<CollectionItem[]>(() => getBundledItems())
+  const [preferences, setPreferences] = useState<UserPreferences>(() => loadPreferences())
   const [mode, setMode] = useState<VaultMode>('bundled')
   const [handle, setHandle] = useState<VaultHandle | null>(null)
   const [busy, setBusy] = useState(false)
@@ -120,15 +125,18 @@ export function useVault(): VaultState {
     try {
       await ensureVaultStructure(h)
       const loaded = await readDirectory(h)
+      const loadedPreferences = await readVaultPreferences(h)
       setHandle(h)
       setMode('directory')
       setItems(loaded)
+      setPreferences(loadedPreferences)
       return true
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       notifications.error('无法读取收藏库', message)
       setMode('bundled')
       setItems(getBundledItems())
+      setPreferences(loadPreferences())
       return false
     } finally {
       setBusy(false)
@@ -179,6 +187,7 @@ export function useVault(): VaultState {
       setHandle(null)
       setMode('bundled')
       setItems(getBundledItems())
+      setPreferences(loadPreferences())
       notifications.success('已断开本地收藏库', '本地文件没有被删除。')
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -191,6 +200,7 @@ export function useVault(): VaultState {
     try {
       if (mode === 'directory' && handle) {
         setItems(await readDirectory(handle))
+        setPreferences(await readVaultPreferences(handle))
       } else {
         setItems(getBundledItems())
       }
@@ -305,6 +315,7 @@ export function useVault(): VaultState {
           await importVaultZip(handle, file)
         })
         setItems(await readDirectory(handle))
+        setPreferences(await readVaultPreferences(handle))
         notifications.success('收藏库恢复完成', '恢复前的原数据已自动下载备份。')
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
@@ -437,8 +448,29 @@ export function useVault(): VaultState {
     }
   }, [mode, handle, notifications])
 
+  const savePreferences = useCallback(async (next: UserPreferences): Promise<void> => {
+    if (mode !== 'directory' || !handle) return
+    if (next.budgetRange[0] > next.budgetRange[1]) {
+      notifications.error('偏好保存失败', '预算下限不能高于预算上限。')
+      throw new Error('预算范围无效')
+    }
+    setBusy(true)
+    try {
+      await enqueueVaultWrite(handle, () => writeVaultPreferences(handle, next))
+      setPreferences(next)
+      notifications.success('收藏库偏好已保存', 'settings/user.md')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      notifications.error('偏好保存失败', message)
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }, [mode, handle, notifications])
+
   return {
     items,
+    preferences,
     mode,
     supported,
     writable,
@@ -455,6 +487,7 @@ export function useVault(): VaultState {
     diagnose,
     repairDuplicateIds,
     cleanOrphanResources,
+    savePreferences,
     loadHero,
   }
 }
