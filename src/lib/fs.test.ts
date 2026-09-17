@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { generateMissingThumbnails, importVaultZip, loadItemHero, readVault, writeItem, type VaultHandle } from './fs'
 import { serializeItem } from './serialize'
 import { createBlankItem } from './store'
+import { listHistory } from './vaultHistory'
 
 class MemoryFile {
   kind = 'file' as const
@@ -94,6 +95,20 @@ describe('vault ZIP restore', () => {
 })
 
 describe('vault image persistence', () => {
+  it('archives the previous Markdown before overwriting an item', async () => {
+    const root = new MemoryDirectory('vault')
+    const item = createBlankItem('keyboards')
+    item.id = 'history-item'
+    item.name = 'Before'
+    item.filePath = 'keyboards/history-item.md'
+    await writeItem(root as unknown as VaultHandle, item)
+    await writeItem(root as unknown as VaultHandle, { ...item, name: 'After' }, item)
+
+    const versions = await listHistory(root as unknown as VaultHandle)
+    expect(versions).toHaveLength(1)
+    expect(versions[0].itemId).toBe('history-item')
+  })
+
   it('isolates a broken Markdown file and continues loading valid items', async () => {
     const root = new MemoryDirectory('vault')
     const keyboards = await root.getDirectoryHandle('keyboards', { create: true })

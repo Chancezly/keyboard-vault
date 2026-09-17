@@ -34,6 +34,7 @@ import {
 import { enqueueVaultWrite } from './vaultWriteQueue'
 import { readVaultPreferences, writeVaultPreferences } from './vaultPreferences'
 import { loadPreferences } from './collection'
+import { listHistory, restoreHistory, type HistoryVersion } from './vaultHistory'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -59,6 +60,8 @@ export interface VaultState {
   repairDuplicateIds: () => Promise<VaultDiagnosticsReport | null>
   cleanOrphanResources: (paths: string[]) => Promise<VaultDiagnosticsReport | null>
   savePreferences: (preferences: UserPreferences) => Promise<void>
+  getHistory: () => Promise<HistoryVersion[]>
+  restoreVersion: (item: CollectionItem, version: HistoryVersion) => Promise<void>
   loadHero: (item: CollectionItem) => Promise<CollectionItem>
 }
 
@@ -468,6 +471,20 @@ export function useVault(): VaultState {
     }
   }, [mode, handle, notifications])
 
+  const getHistory = useCallback(async () => mode === 'directory' && handle ? listHistory(handle) : [], [mode, handle])
+  const restoreVersion = useCallback(async (item: CollectionItem, version: HistoryVersion) => {
+    if (mode !== 'directory' || !handle) return
+    setBusy(true)
+    try {
+      await enqueueVaultWrite(handle, () => restoreHistory(handle, item, version))
+      setItems(await readDirectory(handle))
+      notifications.success('历史版本已恢复', item.name)
+    } catch(error) {
+      notifications.error('历史版本恢复失败', error instanceof Error ? error.message : String(error))
+      throw error
+    } finally { setBusy(false) }
+  }, [mode, handle, readDirectory, notifications])
+
   return {
     items,
     preferences,
@@ -488,6 +505,8 @@ export function useVault(): VaultState {
     repairDuplicateIds,
     cleanOrphanResources,
     savePreferences,
+    getHistory,
+    restoreVersion,
     loadHero,
   }
 }

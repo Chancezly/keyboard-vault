@@ -10,6 +10,7 @@ import { MobileTabBar } from './components/MobileTabBar'
 import { MobileMenuSheet } from './components/MobileMenuSheet'
 import { VaultDiagnosticsDialog } from './components/VaultDiagnosticsDialog'
 import { PreferencesDialog } from './components/PreferencesDialog'
+import { HistoryDialog } from './components/HistoryDialog'
 import { CollectionContent } from './features/collection/CollectionContent'
 import { useCollectionView } from './features/collection/useCollectionView'
 import { createBlankItem } from './lib/store'
@@ -17,6 +18,7 @@ import { useVault } from './lib/useVault'
 import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
 import { CATEGORY_LABELS } from './lib/types'
 import type { VaultDiagnosticsReport } from './lib/vaultDiagnostics'
+import type { HistoryVersion } from './lib/vaultHistory'
 
 export default function App() {
   const vault = useVault()
@@ -48,6 +50,9 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [diagnostics, setDiagnostics] = useState<VaultDiagnosticsReport | null>(null)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
+  const [historyVersions, setHistoryVersions] = useState<HistoryVersion[] | null>(null)
+
+  const handleOpenHistory = async () => setHistoryVersions(await vault.getHistory())
 
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
 
@@ -173,6 +178,7 @@ export default function App() {
         onGenerateThumbnails={vault.generateThumbnails}
         onRunDiagnostics={() => void handleRunDiagnostics()}
         onOpenPreferences={() => setPreferencesOpen(true)}
+        onOpenHistory={() => void handleOpenHistory()}
       />
 
       <div className="flex flex-1 min-w-0 flex-col lg:flex-row overflow-hidden">
@@ -260,6 +266,7 @@ export default function App() {
         onGenerateThumbnails={vault.generateThumbnails}
         onRunDiagnostics={() => void handleRunDiagnostics()}
         onOpenPreferences={() => setPreferencesOpen(true)}
+        onOpenHistory={() => void handleOpenHistory()}
       />
 
       {selectedItem && !editing && (
@@ -307,6 +314,13 @@ export default function App() {
       )}
       {preferencesOpen && (
         <PreferencesDialog preferences={vault.preferences} onClose={() => setPreferencesOpen(false)} onSave={async (next) => { await vault.savePreferences(next); setPreferencesOpen(false) }} />
+      )}
+      {historyVersions && (
+        <HistoryDialog versions={historyVersions} items={items} onClose={() => setHistoryVersions(null)} onRestore={async (item, version) => {
+          if (!window.confirm(`恢复「${item.name}」的这个历史版本？当前内容会先自动备份。`)) return
+          await vault.restoreVersion(item, version)
+          setHistoryVersions(await vault.getHistory())
+        }} />
       )}
     </div>
   )

@@ -11,6 +11,7 @@ import {
   Images,
   ScanSearch,
   Settings2,
+  History,
 } from 'lucide-react'
 interface MobileMenuSheetProps {
   open: boolean
@@ -34,6 +35,7 @@ interface MobileMenuSheetProps {
   onGenerateThumbnails: () => void
   onRunDiagnostics: () => void
   onOpenPreferences: () => void
+  onOpenHistory: () => void
 }
 
 export function MobileMenuSheet({
@@ -53,6 +55,7 @@ export function MobileMenuSheet({
   onGenerateThumbnails,
   onRunDiagnostics,
   onOpenPreferences,
+  onOpenHistory,
 }: MobileMenuSheetProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
 
@@ -205,6 +208,7 @@ export function MobileMenuSheet({
                 收藏库诊断
               </button>
               <button type="button" onClick={()=>{onOpenPreferences();onClose()}} disabled={vaultBusy} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"><Settings2 className="w-4 h-4"/>偏好设置</button>
+              <button type="button" onClick={()=>{onOpenHistory();onClose()}} disabled={vaultBusy} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"><History className="w-4 h-4"/>历史版本</button>
             </>
           ) : (
             <>

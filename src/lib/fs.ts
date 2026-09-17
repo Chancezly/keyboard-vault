@@ -11,6 +11,7 @@ import {
   suspendVaultImageEviction,
   wasVaultImageRevoked,
 } from './blobImageCache'
+import { archiveExistingItem } from './vaultHistory'
 
 const CATEGORIES: ItemCategory[] = ['keyboards', 'keycaps', 'switches', 'builds']
 
@@ -653,6 +654,11 @@ export async function writeItem(
     thumbnail,
   }
   const dir = await ensureDir(handle, [item.category])
+  await archiveExistingItem(handle, {
+    id: item.id,
+    category: previous?.category ?? item.category,
+    filePath: previous?.filePath ?? `${item.category}/${mdFileName}`,
+  })
   const fh = await dir.getFileHandle(mdFileName, { create: true })
   const writable = await fh.createWritable()
   await writable.write(serializeItem(toSerialize))

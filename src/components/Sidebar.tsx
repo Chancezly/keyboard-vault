@@ -15,6 +15,7 @@ import {
   ScanSearch,
   Heart,
   Settings2,
+  History,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
 import { CATEGORY_LABELS } from '../lib/types'
@@ -45,6 +46,7 @@ interface SidebarProps {
   onGenerateThumbnails: () => void
   onRunDiagnostics: () => void
   onOpenPreferences: () => void
+  onOpenHistory: () => void
 }
 
 const NAV_ITEMS: { id: ItemCategory | 'all'; icon: typeof Keyboard; color: string }[] = [
@@ -74,6 +76,7 @@ export function Sidebar({
   onGenerateThumbnails,
   onRunDiagnostics,
   onOpenPreferences,
+  onOpenHistory,
 }: SidebarProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
   return (
@@ -238,6 +241,7 @@ export function Sidebar({
             <button type="button" onClick={onOpenPreferences} disabled={vaultBusy} className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary disabled:opacity-40">
               <Settings2 className="w-3.5 h-3.5"/><span>偏好设置</span>
             </button>
+            <button type="button" onClick={onOpenHistory} disabled={vaultBusy} className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[12px] text-text-tertiary hover:bg-white/[0.04] disabled:opacity-40"><History className="w-3.5 h-3.5"/><span>历史版本</span></button>
           </>
         ) : (
           <button
