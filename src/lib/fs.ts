@@ -443,22 +443,17 @@ export async function loadItemHero(
 ): Promise<CollectionItem> {
   // 只还原原图引用；缩略图继续保持可直接显示的 URL。
   const stable = { ...stabilizeImageRefs(item), thumbnail: item.thumbnail }
-  const heroRef = stable.images[0]
-  if (!heroRef) return { ...stable, image: '' }
-
-  let resolved = ''
-  if (/^(data:|https?:|\/\/)/.test(heroRef)) {
-    resolved = heroRef
-  } else if (!heroRef.startsWith('blob:')) {
-    const loadImage = dependencies.loadImage ?? loadImageByName
-    resolved = await loadImage(handle, heroRef, 'images') ?? ''
-  }
-
-  const images = resolved ? [resolved, ...stable.images.slice(1)] : stable.images
+  if (!stable.images.length) return { ...stable, image: '' }
+  const loadImage = dependencies.loadImage ?? loadImageByName
+  const images = (await Promise.all(stable.images.map(async (ref) => {
+    if (/^(data:|https?:|\/\/)/.test(ref)) return ref
+    if (ref.startsWith('blob:')) return ''
+    return await loadImage(handle, ref, 'images') ?? ''
+  }))).filter(Boolean)
   return {
     ...stable,
     images,
-    image: resolved || stable.thumbnail || '',
+    image: images[0] || stable.thumbnail || '',
   }
 }
 

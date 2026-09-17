@@ -232,6 +232,18 @@ describe('vault image persistence', () => {
     expect(detailed.images[0]).toBe('data:image/jpeg;base64,AQID')
   })
 
+  it('loads every gallery image only when item detail is opened', async () => {
+    const item = createBlankItem('keyboards')
+    item.images = ['hero.jpg', 'gallery-a.jpg', 'gallery-b.jpg']
+    item.image = 'hero.jpg'
+    const loadedRefs: string[] = []
+    const detailed = await loadItemHero(new MemoryDirectory('vault') as unknown as VaultHandle, item, {
+      loadImage: async (_handle, ref) => { loadedRefs.push(ref); return `blob:${ref}` },
+    })
+    expect(loadedRefs).toEqual(['hero.jpg', 'gallery-a.jpg', 'gallery-b.jpg'])
+    expect(detailed.images).toEqual(['blob:hero.jpg', 'blob:gallery-a.jpg', 'blob:gallery-b.jpg'])
+  })
+
   it('writes an uploaded thumbnail separately and records it in Markdown', async () => {
     const root = new MemoryDirectory('vault')
     const item = createBlankItem('keyboards')

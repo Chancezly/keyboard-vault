@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { X, Upload, Trash2, Download, Plus, Save, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Upload, Trash2, Download, Plus, Save, Loader2 } from 'lucide-react'
 import type { BuildComposition, CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
 import { createThumbnailDataUrl, IMAGE_ACCEPT, normalizeImageFile } from '../lib/imageNormalize'
 import {
@@ -266,28 +266,48 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
   const profileOptions = collectFieldOptions(inventoryItems, 'keycaps', 'profile', KEYCAP_PROFILE_OPTIONS)
   const materialOptions = collectFieldOptions(inventoryItems, 'keycaps', 'material', KEYCAP_MATERIAL_OPTIONS)
 
-  const handleImage = async (file: File) => {
+  const handleImages = async (files: File[]) => {
+    if (!files.length) return
     setImageError(null)
     setImageBusy(true)
     try {
       // 主图统一转成 JPEG（含手机 HEIC/HEIF），首页缩略图单独生成 WebP。
-      const normalized = await normalizeImageFile(file)
-      const url = normalized.dataUrl
-      const thumbnail = await createThumbnailDataUrl(url)
+      const urls: string[] = []
+      for (const file of files) urls.push((await normalizeImageFile(file)).dataUrl)
       setCoverUploaded(true)
-      setDraft((d) => ({
-        ...d,
-        image: url,
-        images: [url, ...d.images.slice(1)],
-        thumbnail,
-        coverPosition: { x: 50, y: 50 },
-      }))
+      setDraft((d) => {
+        const images = d.images.length ? [...d.images, ...urls] : urls
+        return { ...d, image: images[0] ?? '', images, coverPosition: d.coverPosition ?? { x: 50, y: 50 } }
+      })
+      if (!draft.images.length && urls[0]) {
+        const thumbnail = await createThumbnailDataUrl(urls[0])
+        setDraft((d) => ({ ...d, thumbnail }))
+      }
     } catch (e) {
       setImageError(e instanceof Error ? e.message : String(e))
     } finally {
       setImageBusy(false)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  const selectMainImage = async (index: number) => {
+    const images = [...draft.images]
+    const [selected] = images.splice(index, 1)
+    images.unshift(selected)
+    const thumbnail = await createThumbnailDataUrl(selected).catch(() => draft.thumbnail)
+    setDraft((d) => ({ ...d, images, image: selected, thumbnail, coverPosition: { x: 50, y: 50 } }))
+  }
+  const moveImage = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target <= 0 || target >= draft.images.length) return
+    const images = [...draft.images]; [images[index], images[target]] = [images[target], images[index]]
+    setDraft((d) => ({ ...d, images, image: images[0] ?? '' }))
+  }
+  const removeImage = async (index: number) => {
+    const images = draft.images.filter((_, current) => current !== index)
+    const thumbnail = index === 0 && images[0] ? await createThumbnailDataUrl(images[0]).catch(() => undefined) : draft.thumbnail
+    setDraft((d) => ({ ...d, images, image: images[0] ?? '', thumbnail }))
   }
 
   const addTag = () => {
@@ -410,7 +430,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="flex items-center gap-2 text-[12px] text-white">
-                      <Upload className="w-4 h-4" /> 更换图片
+                      <Upload className="w-4 h-4" /> 添加图片
                     </span>
                   </div>
                 </>
@@ -425,11 +445,27 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
               ref={fileRef}
               type="file"
               accept={IMAGE_ACCEPT}
+              multiple
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && void handleImage(e.target.files[0])}
+              onChange={(e) => void handleImages(Array.from(e.target.files ?? []))}
             />
             {imageError && (
               <p className="text-[11px] text-red-300 mt-1.5">{imageError}</p>
+            )}
+            {draft.images.length > 0 && !imageBusy && (
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {draft.images.map((src, index) => (
+                  <div key={`${src}-${index}`} className={`relative h-20 w-24 shrink-0 overflow-hidden rounded-lg border ${index === 0 ? 'border-accent' : 'border-white/10'}`}>
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/65 p-1">
+                      <button type="button" title="左移" disabled={index<=1} onClick={()=>moveImage(index,-1)} className="disabled:opacity-30"><ChevronLeft className="h-3.5 w-3.5"/></button>
+                      {index>0&&<button type="button" onClick={()=>void selectMainImage(index)} className="text-[9px] text-accent">主图</button>}
+                      <button type="button" title="右移" disabled={index===0||index===draft.images.length-1} onClick={()=>moveImage(index,1)} className="disabled:opacity-30"><ChevronRight className="h-3.5 w-3.5"/></button>
+                      <button type="button" title="删除图片" onClick={()=>void removeImage(index)}><Trash2 className="h-3 w-3 text-red-300"/></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
             {draft.image && !imageBusy && (
               <div className="mt-3 grid grid-cols-2 gap-4 rounded-xl bg-white/[0.025] px-3 py-2.5">

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { X, Star, Tag, ExternalLink, History, Pencil } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -110,6 +111,8 @@ function DetailFieldGrid({ fields }: { fields: { label: string; value: string }[
 }
 
 export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusChange }: ItemDetailProps) {
+  const [activeImage, setActiveImage] = useState(item.image)
+  useEffect(() => setActiveImage(item.image), [item.id, item.image])
   const isBuild = item.category === 'builds'
   const displayName = isBuild ? getBuildDisplayName(item) : item.name
   const composition = isBuild ? getBuildComposition(item) : null
@@ -144,7 +147,7 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
           {/* Hero */}
           <div className="relative h-56 sm:h-80 overflow-hidden">
             <CoverImage
-              src={item.image}
+              src={activeImage}
               alt={displayName}
               position={item.coverPosition}
               className="absolute inset-0"
@@ -202,6 +205,16 @@ export function ItemDetail({ item, readOnly = false, onClose, onEdit, onStatusCh
               )}
             </div>
           </div>
+
+          {item.images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto px-6 py-3 sm:px-10" aria-label="图片相册">
+              {item.images.map((src, index) => (
+                <button key={`${src}-${index}`} type="button" onClick={() => setActiveImage(src)} aria-label={`查看第 ${index + 1} 张图片`} className={`h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 ${activeImage === src ? 'border-accent' : 'border-transparent opacity-65'}`}>
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="px-6 sm:px-10 space-y-10 pt-2 pb-4">
             {isBuild && buildSections.length > 0 && (
