@@ -852,7 +852,7 @@ async function addDirToZip(
     const path = prefix ? `${prefix}/${name}` : name
     if (entry.kind === 'file') {
       const file = await (entry as FileSystemFileHandleLike).getFile()
-      zip.file(path, file)
+      zip.file(path, await file.arrayBuffer())
     } else {
       await addDirToZip(entry as FileSystemDirectoryHandleLike, zip, path)
     }
@@ -867,7 +867,11 @@ export async function exportVaultZip(handle: VaultHandle): Promise<Blob> {
 }
 
 // 把 ZIP 内容写入当前已连接文件夹（同名覆盖），用于换设备快速恢复
-export async function importVaultZip(handle: VaultHandle, file: File): Promise<void> {
+export async function importVaultZip(
+  handle: VaultHandle,
+  file: File,
+  dependencies: { beforeWrite?: (path: string) => Promise<void> } = {},
+): Promise<void> {
   const MAX_ARCHIVE_BYTES = 250 * 1024 * 1024
   const MAX_UNPACKED_BYTES = 500 * 1024 * 1024
   const MAX_FILE_BYTES = 40 * 1024 * 1024
@@ -907,20 +911,40 @@ export async function importVaultZip(handle: VaultHandle, file: File): Promise<v
     prepared.push({ parts, content })
   }
 
-  // 所有内容先在内存中完成校验，确认无误后才清空当前 vault。
-  markdownCacheByVault.delete(handle)
-  for await (const [name] of handle.entries()) {
-    await handle.removeEntry(name, { recursive: true })
+  // 写入前把当前目录完整快照保留在内存；任何写入失败都会自动回滚。
+  const backupZip = await JSZip.loadAsync(await exportVaultZip(handle).then((blob) => blob.arrayBuffer()))
+  const backup: { parts: string[]; content: Blob }[] = []
+  for (const entry of Object.values(backupZip.files).filter((candidate) => !candidate.dir)) {
+    backup.push({ parts: entry.name.split('/').filter(Boolean), content: await entry.async('blob') })
   }
 
-  for (const { parts: originalParts, content } of prepared) {
-    const parts = [...originalParts]
-    const fileName = parts.pop() as string
-    let dir = handle
-    for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create: true })
-    const fh = await dir.getFileHandle(fileName, { create: true })
-    const writable = await fh.createWritable()
-    await writable.write(content)
-    await writable.close()
+  const replaceContents = async (
+    entries: { parts: string[]; content: Blob }[],
+    beforeWrite?: (path: string) => Promise<void>,
+  ) => {
+    markdownCacheByVault.delete(handle)
+    for await (const [name] of handle.entries()) await handle.removeEntry(name, { recursive: true })
+    for (const { parts: originalParts, content } of entries) {
+      const parts = [...originalParts]
+      const fileName = parts.pop() as string
+      await beforeWrite?.([...parts, fileName].join('/'))
+      let dir = handle
+      for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create: true })
+      const fh = await dir.getFileHandle(fileName, { create: true })
+      const writable = await fh.createWritable()
+      await writable.write(content)
+      await writable.close()
+    }
+  }
+
+  try {
+    await replaceContents(prepared, dependencies.beforeWrite)
+  } catch (error) {
+    try {
+      await replaceContents(backup)
+    } catch (rollbackError) {
+      throw new Error(`ZIP 恢复失败且自动回滚失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+    }
+    throw new Error(`ZIP 恢复失败，原收藏库已自动回滚：${error instanceof Error ? error.message : String(error)}`)
   }
 }

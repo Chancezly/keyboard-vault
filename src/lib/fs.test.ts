@@ -92,6 +92,21 @@ describe('vault ZIP restore', () => {
     await expect(importVaultZip(root as unknown as VaultHandle, unsafe)).rejects.toThrow('不安全路径')
     expect(root.children.has('keep.md')).toBe(true)
   })
+
+  it('automatically rolls back the original vault when restore writing fails', async () => {
+    const root = new MemoryDirectory('vault')
+    const keep = await root.getFileHandle('keep.md', { create: true })
+    keep.data = new Blob(['original'])
+    const archive = await zipFile({ 'keyboards/ok.md': 'ok', 'keyboards/fail.md': 'fail' })
+
+    await expect(importVaultZip(root as unknown as VaultHandle, archive, {
+      beforeWrite: async (path) => { if (path.endsWith('fail.md')) throw new Error('simulated failure') },
+    })).rejects.toThrow('已自动回滚')
+
+    const restored = root.children.get('keep.md') as MemoryFile
+    await expect(restored.data.text()).resolves.toBe('original')
+    expect(root.children.has('keyboards')).toBe(false)
+  })
 })
 
 describe('vault image persistence', () => {
