@@ -105,9 +105,9 @@ export function ItemCard({ item, onClick, viewMode, imagePriority = false }: Ite
         onClick={onClick}
         className="
           w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl
-          bg-white/[0.03] hover:bg-white/[0.06]
-          border border-white/[0.06] hover:border-white/10
-          transition-all duration-300 text-left group
+          bg-[#151517] hover:bg-[#19191c]
+          border border-white/[0.065] hover:border-white/[0.11]
+          transition-colors duration-200 text-left group
         "
       >
         <CoverImage
@@ -172,12 +172,10 @@ export function ItemCard({ item, onClick, viewMode, imagePriority = false }: Ite
     <button
       onClick={onClick}
       className="
-        group relative flex flex-col rounded-[20px] overflow-hidden
-        bg-white/[0.03] border border-white/[0.06]
-        hover:bg-white/[0.05] hover:border-white/10
-        transition-all duration-300 text-left
-        hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.45)]
-        hover:-translate-y-0.5
+        group relative flex flex-col rounded-[18px] overflow-hidden
+        bg-[#151517] border border-white/[0.065]
+        hover:bg-[#19191c] hover:border-white/[0.11]
+        transition-colors duration-200 text-left
       "
     >
       <div className="relative aspect-[4/3]">

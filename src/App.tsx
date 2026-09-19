@@ -190,12 +190,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] bg-surface overflow-hidden">
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[20%] w-[600px] h-[600px] rounded-full bg-accent/[0.04] blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] rounded-full bg-purple-500/[0.03] blur-[100px]" />
-      </div>
-
+    <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#0b0b0d]">
       <Sidebar
         activeCategory={category}
         onCategoryChange={setCategory}
@@ -295,7 +290,6 @@ export default function App() {
       <MobileMenuSheet
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
-        stats={stats}
         vaultSupported={vault.supported}
         vaultWritable={vaultWritable}
         vaultDirName={vault.dirName}

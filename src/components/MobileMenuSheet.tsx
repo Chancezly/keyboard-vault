@@ -1,28 +1,21 @@
 import { useRef } from 'react'
 import {
-  X,
-  Keyboard,
-  Sparkles,
-  HardDrive,
-  FolderSync,
-  Unplug,
   Download,
-  Upload,
+  FolderSync,
+  HardDrive,
+  History,
   Images,
   ScanSearch,
   Settings2,
-  History,
   ShieldCheck,
+  Sparkles,
+  Upload,
+  X,
 } from 'lucide-react'
+
 interface MobileMenuSheetProps {
   open: boolean
   onClose: () => void
-  stats: {
-    inUse: number
-    collection: number
-    wishlist: number
-    sold: number
-  }
   vaultSupported: boolean
   vaultWritable: boolean
   vaultDirName: string | null
@@ -40,213 +33,90 @@ interface MobileMenuSheetProps {
   onOpenPrivacy: () => void
 }
 
-export function MobileMenuSheet({
-  open,
-  onClose,
-  stats,
-  vaultSupported,
-  vaultWritable,
-  vaultDirName,
-  vaultBusy,
-  aiOpen,
-  onOpenAI,
-  onConnectVault,
-  onRequestDisconnect,
-  onExportZip,
-  onImportZip,
-  onGenerateThumbnails,
-  onRunDiagnostics,
-  onOpenPreferences,
-  onOpenHistory,
-  onOpenPrivacy,
-}: MobileMenuSheetProps) {
-  const zipInputRef = useRef<HTMLInputElement>(null)
+function MenuButton({ icon: Icon, label, detail, disabled, onClick }: {
+  icon: typeof Sparkles
+  label: string
+  detail?: string
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} className="flex min-h-[52px] w-full items-center gap-3 px-4 py-2 text-left transition-colors active:bg-white/[0.06] disabled:opacity-35">
+      <Icon className="h-[18px] w-[18px] shrink-0 text-text-secondary" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] font-medium">{label}</span>
+        {detail ? <span className="mt-0.5 block truncate text-[10px] text-text-tertiary">{detail}</span> : null}
+      </span>
+    </button>
+  )
+}
 
+export function MobileMenuSheet(props: MobileMenuSheetProps) {
+  const {
+    open, onClose, vaultSupported, vaultWritable, vaultDirName, vaultBusy, aiOpen,
+    onOpenAI, onConnectVault, onRequestDisconnect, onExportZip, onImportZip,
+    onGenerateThumbnails, onRunDiagnostics, onOpenPreferences, onOpenHistory, onOpenPrivacy,
+  } = props
+  const zipInputRef = useRef<HTMLInputElement>(null)
   if (!open) return null
 
+  const runAndClose = (action: () => void) => {
+    onClose()
+    action()
+  }
+
   return (
-    <div className="lg:hidden fixed inset-0 z-50">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        aria-label="关闭菜单"
-        onClick={onClose}
-      />
-      <aside
-        className="
-          absolute right-0 top-0 bottom-0 w-[min(100%,300px)]
-          glass-strong border-l border-white/[0.08]
-          flex flex-col overflow-y-auto
-          pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
-        "
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-              <Keyboard className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h2 className="text-[15px] font-semibold">KeyVault</h2>
-              <p className="text-[11px] text-text-tertiary">客制化键盘收藏库</p>
-            </div>
+    <div className="fixed inset-0 z-50 lg:hidden">
+      <button type="button" className="absolute inset-0 bg-black/65" aria-label="关闭工具与设置" onClick={onClose} />
+      <section className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-[26px] border-t border-white/[0.09] bg-[#1b1b1e] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/60">
+        <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-white/20" />
+        <header className="flex items-center justify-between px-5 pb-3 pt-3">
+          <div>
+            <h2 className="text-[17px] font-semibold tracking-tight">工具与设置</h2>
+            <p className="mt-0.5 text-[11px] text-text-tertiary">管理收藏库与个人偏好</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg text-text-tertiary hover:bg-white/[0.06]"
-          >
-            <X className="w-5 h-5" />
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-text-secondary" aria-label="关闭">
+            <X className="h-4 w-4" />
           </button>
-        </div>
+        </header>
 
-        <div className="px-5 py-4 mx-4 mt-4 rounded-xl bg-white/[0.03] space-y-2">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-text-tertiary mb-2">
-            状态统计
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-[12px]">
-            <div className="flex justify-between text-text-tertiary">
-              <span>使用中</span>
-              <span className="text-emerald-400 tabular-nums">{stats.inUse}</span>
-            </div>
-            <div className="flex justify-between text-text-tertiary">
-              <span>收藏中</span>
-              <span className="text-accent tabular-nums">{stats.collection}</span>
-            </div>
-            <div className="flex justify-between text-text-tertiary">
-              <span>心愿单</span>
-              <span className="text-amber-400 tabular-nums">{stats.wishlist}</span>
-            </div>
-            <div className="flex justify-between text-text-tertiary">
-              <span>已售出</span>
-              <span className="text-zinc-400 tabular-nums">{stats.sold}</span>
-            </div>
-          </div>
-        </div>
-
-        <input
-          ref={zipInputRef}
-          type="file"
-          accept=".zip"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) onImportZip(file)
-            e.target.value = ''
-          }}
-        />
-
-        <div className="px-4 py-4 mt-auto space-y-2">
-          <button
-            type="button"
-            onClick={() => {
-              onOpenAI()
-              onClose()
-            }}
-            className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-[14px] font-medium min-h-[44px] ${
-              aiOpen
-                ? 'bg-accent/20 text-accent border border-accent/30'
-                : 'bg-white/[0.04] text-text-secondary'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            AI 助手
-            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-md bg-accent/20 text-accent">
-              Beta
-            </span>
-          </button>
-
-          {vaultWritable ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  onRequestDisconnect()
-                  onClose()
-                }}
-                className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-[14px] text-emerald-300/90 bg-white/[0.03] min-h-[44px]"
-              >
-                <HardDrive className="w-4 h-4 shrink-0" />
-                <span className="flex-1 text-left truncate">{vaultDirName ?? '本地文件夹'}</span>
-                <Unplug className="w-4 h-4 shrink-0" />
-              </button>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={onExportZip}
-                  disabled={vaultBusy}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
-                >
-                  <Download className="w-4 h-4" />
-                  备份
-                </button>
-                <button
-                  type="button"
-                  onClick={() => zipInputRef.current?.click()}
-                  disabled={vaultBusy}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
-                >
-                  <Upload className="w-4 h-4" />
-                  导入
-                </button>
+        <div className="overflow-y-auto px-3 pb-3">
+          <p className="px-4 pb-1.5 pt-2 text-[10px] font-medium text-text-tertiary">收藏库</p>
+          <div className="overflow-hidden rounded-2xl bg-white/[0.035] divide-y divide-white/[0.06]">
+            {vaultWritable ? (
+              <MenuButton icon={HardDrive} label={vaultDirName ?? '本地收藏库'} detail="已连接 · 点击可断开" onClick={() => runAndClose(onRequestDisconnect)} />
+            ) : (
+              <MenuButton icon={FolderSync} label={vaultSupported ? '连接本地文件夹' : '手机端浏览模式'} detail={vaultSupported ? '连接后解锁编辑和图片上传' : '请在电脑 Chrome 或 Edge 中编辑'} disabled={!vaultSupported || vaultBusy} onClick={() => runAndClose(onConnectVault)} />
+            )}
+            {vaultWritable ? (
+              <div className="grid grid-cols-2 divide-x divide-white/[0.06]">
+                <MenuButton icon={Download} label="导出备份" disabled={vaultBusy} onClick={() => runAndClose(onExportZip)} />
+                <MenuButton icon={Upload} label="导入备份" disabled={vaultBusy} onClick={() => zipInputRef.current?.click()} />
               </div>
-              <button
-                type="button"
-                onClick={onGenerateThumbnails}
-                disabled={vaultBusy}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
-              >
-                <Images className="w-4 h-4" />
-                补齐旧缩略图
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onRunDiagnostics()
-                  onClose()
-                }}
-                disabled={vaultBusy}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
-              >
-                <ScanSearch className="w-4 h-4" />
-                收藏库诊断
-              </button>
-              <button type="button" onClick={()=>{onOpenPreferences();onClose()}} disabled={vaultBusy} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"><Settings2 className="w-4 h-4"/>偏好设置</button>
-              <button type="button" onClick={()=>{onOpenHistory();onClose()}} disabled={vaultBusy} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"><History className="w-4 h-4"/>历史版本</button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  onConnectVault()
-                  onClose()
-                }}
-                disabled={!vaultSupported || vaultBusy}
-                className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-[14px] bg-white/[0.04] disabled:opacity-40 min-h-[44px]"
-              >
-                <FolderSync className="w-4 h-4" />
-                {vaultSupported ? '连接本地文件夹' : 'iPhone 仅支持浏览'}
-              </button>
-              <p className="text-[11px] text-text-tertiary px-1 leading-relaxed">
-                {vaultSupported
-                  ? '连接后编辑直接写入 .md 文件'
-                  : 'iOS Safari 无法连接本地文件夹，可在 Mac/PC 的 Chrome 或 Edge 中编辑。'}
-              </p>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              onOpenPrivacy()
-              onClose()
-            }}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] text-text-tertiary bg-white/[0.025] min-h-[44px]"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            隐私与数据
-          </button>
+            ) : null}
+          </div>
+
+          <p className="px-4 pb-1.5 pt-4 text-[10px] font-medium text-text-tertiary">功能与设置</p>
+          <div className="overflow-hidden rounded-2xl bg-white/[0.035] divide-y divide-white/[0.06]">
+            <MenuButton icon={Sparkles} label={aiOpen ? 'AI 助手 · 已打开' : 'AI 助手'} detail="对话、识图与收藏建议" onClick={() => runAndClose(onOpenAI)} />
+            {vaultWritable ? <MenuButton icon={Images} label="补齐旧缩略图" disabled={vaultBusy} onClick={() => runAndClose(onGenerateThumbnails)} /> : null}
+            {vaultWritable ? <MenuButton icon={ScanSearch} label="收藏库诊断" disabled={vaultBusy} onClick={() => runAndClose(onRunDiagnostics)} /> : null}
+            {vaultWritable ? <MenuButton icon={Settings2} label="偏好设置" disabled={vaultBusy} onClick={() => runAndClose(onOpenPreferences)} /> : null}
+            {vaultWritable ? <MenuButton icon={History} label="历史版本" disabled={vaultBusy} onClick={() => runAndClose(onOpenHistory)} /> : null}
+            <MenuButton icon={ShieldCheck} label="隐私与数据" onClick={() => runAndClose(onOpenPrivacy)} />
+          </div>
+          <p className="pb-1 pt-5 text-center text-[10px] tracking-wide text-white/25">KeyVault · by 吉尼尔斯_</p>
         </div>
-      </aside>
+      </section>
+
+      <input ref={zipInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={(event) => {
+        const file = event.target.files?.[0]
+        if (file) {
+          onClose()
+          onImportZip(file)
+        }
+        event.target.value = ''
+      }} />
     </div>
   )
 }

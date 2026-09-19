@@ -58,7 +58,7 @@ export function CoverImage({
           onError={() => setFailed(true)}
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-white/[0.07] via-[#6b8afd]/[0.12] to-transparent">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-[#1b1b1e]">
           <div className="w-10 h-10 rounded-xl bg-white/[0.07] flex items-center justify-center ring-1 ring-white/[0.06]">
             <Keyboard className="w-5 h-5 text-white/40" />
           </div>
