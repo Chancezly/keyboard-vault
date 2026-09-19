@@ -1,18 +1,13 @@
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ItemDetail } from './components/ItemDetail'
 import { ItemEditor } from './components/ItemEditor'
-import { AIPanel } from './components/AIPanel'
 import { ReadOnlyBanner } from './components/ReadOnlyBanner'
 import { DisconnectDialog } from './components/DisconnectDialog'
 import { MobileTabBar } from './components/MobileTabBar'
 import { MobileMenuSheet } from './components/MobileMenuSheet'
-import { VaultDiagnosticsDialog } from './components/VaultDiagnosticsDialog'
-import { PreferencesDialog } from './components/PreferencesDialog'
-import { HistoryDialog } from './components/HistoryDialog'
 import { ConnectionGuideDialog } from './components/ConnectionGuideDialog'
-import { PrivacyDialog } from './components/PrivacyDialog'
 import { CollectionContent } from './features/collection/CollectionContent'
 import { useCollectionView } from './features/collection/useCollectionView'
 import { createBlankItem } from './lib/store'
@@ -21,6 +16,38 @@ import type { CollectionItem, ItemCategory, ItemStatus } from './lib/types'
 import { CATEGORY_LABELS } from './lib/types'
 import type { VaultDiagnosticsReport } from './lib/vaultDiagnostics'
 import type { HistoryVersion } from './lib/vaultHistory'
+
+const AIPanel = lazy(() =>
+  import('./components/AIPanel').then((module) => ({ default: module.AIPanel })),
+)
+const VaultDiagnosticsDialog = lazy(() =>
+  import('./components/VaultDiagnosticsDialog').then((module) => ({
+    default: module.VaultDiagnosticsDialog,
+  })),
+)
+const PreferencesDialog = lazy(() =>
+  import('./components/PreferencesDialog').then((module) => ({
+    default: module.PreferencesDialog,
+  })),
+)
+const HistoryDialog = lazy(() =>
+  import('./components/HistoryDialog').then((module) => ({ default: module.HistoryDialog })),
+)
+const PrivacyDialog = lazy(() =>
+  import('./components/PrivacyDialog').then((module) => ({ default: module.PrivacyDialog })),
+)
+
+function LazyOverlayFallback() {
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="status"
+      aria-label="正在打开"
+    >
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
+    </div>
+  )
+}
 
 export default function App() {
   const vault = useVault()
@@ -238,21 +265,25 @@ export default function App() {
           </div>
         </main>
 
-        <AIPanel
-          open={aiOpen}
-          onClose={() => setAiOpen(false)}
-          items={items}
-          preferences={vault.preferences}
-          allTags={allTags}
-          selectedItem={selectedItem}
-          readOnly={readOnly}
-          onApplyTags={readOnly ? undefined : handleApplyTags}
-          onSaveItem={readOnly ? undefined : async (item) => {
-            const saved = await vault.save(item)
-            setCategory(item.category)
-            setSelectedItem(saved)
-          }}
-        />
+        {aiOpen && (
+          <Suspense fallback={<LazyOverlayFallback />}>
+            <AIPanel
+              open={aiOpen}
+              onClose={() => setAiOpen(false)}
+              items={items}
+              preferences={vault.preferences}
+              allTags={allTags}
+              selectedItem={selectedItem}
+              readOnly={readOnly}
+              onApplyTags={readOnly ? undefined : handleApplyTags}
+              onSaveItem={readOnly ? undefined : async (item) => {
+                const saved = await vault.save(item)
+                setCategory(item.category)
+                setSelectedItem(saved)
+              }}
+            />
+          </Suspense>
+        )}
       </div>
 
       <MobileTabBar
@@ -319,22 +350,40 @@ export default function App() {
       )}
 
       {diagnostics && (
-        <VaultDiagnosticsDialog
-          report={diagnostics}
-          onClose={() => setDiagnostics(null)}
-          onRepairDuplicateIds={handleRepairDuplicateIds}
-          onCleanOrphans={handleCleanOrphans}
-        />
+        <Suspense fallback={<LazyOverlayFallback />}>
+          <VaultDiagnosticsDialog
+            report={diagnostics}
+            onClose={() => setDiagnostics(null)}
+            onRepairDuplicateIds={handleRepairDuplicateIds}
+            onCleanOrphans={handleCleanOrphans}
+          />
+        </Suspense>
       )}
       {preferencesOpen && (
-        <PreferencesDialog preferences={vault.preferences} onClose={() => setPreferencesOpen(false)} onSave={async (next) => { await vault.savePreferences(next); setPreferencesOpen(false) }} />
+        <Suspense fallback={<LazyOverlayFallback />}>
+          <PreferencesDialog
+            preferences={vault.preferences}
+            onClose={() => setPreferencesOpen(false)}
+            onSave={async (next) => {
+              await vault.savePreferences(next)
+              setPreferencesOpen(false)
+            }}
+          />
+        </Suspense>
       )}
       {historyVersions && (
-        <HistoryDialog versions={historyVersions} items={items} onClose={() => setHistoryVersions(null)} onRestore={async (item, version) => {
-          if (!window.confirm(`恢复「${item.name}」的这个历史版本？当前内容会先自动备份。`)) return
-          await vault.restoreVersion(item, version)
-          setHistoryVersions(await vault.getHistory())
-        }} />
+        <Suspense fallback={<LazyOverlayFallback />}>
+          <HistoryDialog
+            versions={historyVersions}
+            items={items}
+            onClose={() => setHistoryVersions(null)}
+            onRestore={async (item, version) => {
+              if (!window.confirm(`恢复「${item.name}」的这个历史版本？当前内容会先自动备份。`)) return
+              await vault.restoreVersion(item, version)
+              setHistoryVersions(await vault.getHistory())
+            }}
+          />
+        </Suspense>
       )}
       {connectionGuideOpen && (
         <ConnectionGuideDialog
@@ -345,7 +394,11 @@ export default function App() {
           onOpenPrivacy={() => setPrivacyOpen(true)}
         />
       )}
-      {privacyOpen && <PrivacyDialog onClose={() => setPrivacyOpen(false)} />}
+      {privacyOpen && (
+        <Suspense fallback={<LazyOverlayFallback />}>
+          <PrivacyDialog onClose={() => setPrivacyOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }

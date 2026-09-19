@@ -14,6 +14,16 @@ describe('CoverImage layout', () => {
 
     expect(html).toContain('class="overflow-hidden bg-[#16161a] absolute inset-0"')
     expect(html).toContain('class="block w-full h-full object-cover')
+    expect(html).toContain('loading="lazy"')
     expect(html).not.toContain('relative overflow-hidden')
+  })
+
+  it('prioritizes only covers explicitly marked as above the fold', () => {
+    const html = renderToStaticMarkup(
+      <CoverImage src="data:image/jpeg;base64,AQID" alt="cover" priority />,
+    )
+
+    expect(html).toContain('loading="eager"')
+    expect(html).toContain('fetchPriority="high"')
   })
 })

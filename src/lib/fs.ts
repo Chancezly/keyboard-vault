@@ -1,4 +1,4 @@
-import JSZip from 'jszip'
+import type JSZip from 'jszip'
 import { hydrateBuildItems } from './builds'
 import { parseItemMarkdown } from './parser'
 import { serializeItem } from './serialize'
@@ -14,6 +14,11 @@ import {
 import { archiveExistingItem } from './vaultHistory'
 
 const CATEGORIES: ItemCategory[] = ['keyboards', 'keycaps', 'switches', 'builds']
+
+async function loadJSZip(): Promise<typeof JSZip> {
+  // 备份/恢复是低频操作，不让压缩库拖慢主页首次加载。
+  return (await import('jszip')).default
+}
 
 // Minimal ambient typing for the File System Access API.
 type PermissionState = 'granted' | 'denied' | 'prompt'
@@ -867,6 +872,7 @@ async function addDirToZip(
 
 // 把整个已连接文件夹打包成 ZIP（md + 图片 + 设置等原样保留）
 export async function exportVaultZip(handle: VaultHandle): Promise<Blob> {
+  const JSZip = await loadJSZip()
   const zip = new JSZip()
   await addDirToZip(handle, zip, '')
   return zip.generateAsync({ type: 'blob' })
@@ -878,6 +884,7 @@ export async function importVaultZip(
   file: File,
   dependencies: { beforeWrite?: (path: string) => Promise<void> } = {},
 ): Promise<void> {
+  const JSZip = await loadJSZip()
   const MAX_ARCHIVE_BYTES = 250 * 1024 * 1024
   const MAX_UNPACKED_BYTES = 500 * 1024 * 1024
   const MAX_FILE_BYTES = 40 * 1024 * 1024

@@ -90,8 +90,14 @@ export function CollectionContent({
   if (viewMode === 'grid') {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-6">
-        {items.map((item) => (
-          <ItemCard key={item.id} item={item} onClick={() => onSelectItem(item)} viewMode="grid" />
+        {items.map((item, index) => (
+          <ItemCard
+            key={item.id}
+            item={item}
+            onClick={() => onSelectItem(item)}
+            viewMode="grid"
+            imagePriority={index < 4}
+          />
         ))}
       </div>
     )
@@ -99,8 +105,14 @@ export function CollectionContent({
 
   return (
     <div className="flex flex-col gap-3 max-w-4xl">
-      {items.map((item) => (
-        <ItemCard key={item.id} item={item} onClick={() => onSelectItem(item)} viewMode="list" />
+      {items.map((item, index) => (
+        <ItemCard
+          key={item.id}
+          item={item}
+          onClick={() => onSelectItem(item)}
+          viewMode="list"
+          imagePriority={index < 6}
+        />
       ))}
     </div>
   )

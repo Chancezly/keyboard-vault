@@ -8,6 +8,7 @@ interface CoverImageProps {
   className?: string
   imgClassName?: string
   position?: { x: number; y: number }
+  priority?: boolean
 }
 
 function isUsableSrc(src?: string): boolean {
@@ -21,7 +22,14 @@ function isUsableSrc(src?: string): boolean {
 }
 
 /** 统一封面：有图显示图片；无图或加载失败显示品牌化占位 */
-export function CoverImage({ src, alt, className = '', imgClassName = '', position }: CoverImageProps) {
+export function CoverImage({
+  src,
+  alt,
+  className = '',
+  imgClassName = '',
+  position,
+  priority = false,
+}: CoverImageProps) {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -44,8 +52,8 @@ export function CoverImage({ src, alt, className = '', imgClassName = '', positi
           alt={alt}
           className={`block w-full h-full object-cover ${imgClassName}`}
           style={{ objectPosition: `${position?.x ?? 50}% ${position?.y ?? 50}%` }}
-          // 首页使用 640px 缩略图，立即加载不会重新读取原始大图。
-          loading="eager"
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
           decoding="async"
           onError={() => setFailed(true)}
         />

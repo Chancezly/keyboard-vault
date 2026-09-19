@@ -1,5 +1,3 @@
-import { heicTo } from 'heic-to'
-
 const HEIC_EXT = /\.(heic|heif)$/i
 const IMAGE_ACCEPT =
   'image/*,.heic,.heif,image/heic,image/heif,image/heic-sequence,image/heif-sequence'
@@ -232,6 +230,8 @@ async function decodeViaEmbeddedJpeg(blob: Blob): Promise<Blob | null> {
 }
 
 async function decodeViaHeicTo(blob: Blob, quality: number): Promise<Blob> {
+  // libheif 接近 3 MB，仅在原生解码失败且确实遇到 HEIC 时下载。
+  const { heicTo } = await import('heic-to')
   const result = await heicTo({
     blob,
     type: 'image/jpeg',
