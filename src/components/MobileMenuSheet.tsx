@@ -12,6 +12,7 @@ import {
   ScanSearch,
   Settings2,
   History,
+  ShieldCheck,
 } from 'lucide-react'
 interface MobileMenuSheetProps {
   open: boolean
@@ -36,6 +37,7 @@ interface MobileMenuSheetProps {
   onRunDiagnostics: () => void
   onOpenPreferences: () => void
   onOpenHistory: () => void
+  onOpenPrivacy: () => void
 }
 
 export function MobileMenuSheet({
@@ -56,6 +58,7 @@ export function MobileMenuSheet({
   onRunDiagnostics,
   onOpenPreferences,
   onOpenHistory,
+  onOpenPrivacy,
 }: MobileMenuSheetProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
 
@@ -231,6 +234,17 @@ export function MobileMenuSheet({
               </p>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              onOpenPrivacy()
+              onClose()
+            }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] text-text-tertiary bg-white/[0.025] min-h-[44px]"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            隐私与数据
+          </button>
         </div>
       </aside>
     </div>

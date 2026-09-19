@@ -35,6 +35,7 @@ import { enqueueVaultWrite } from './vaultWriteQueue'
 import { readVaultPreferences, writeVaultPreferences } from './vaultPreferences'
 import { loadPreferences } from './collection'
 import { listHistory, restoreHistory, type HistoryVersion } from './vaultHistory'
+import { userFacingError } from './userFacingError'
 
 export type VaultMode = 'bundled' | 'directory'
 
@@ -48,7 +49,7 @@ export interface VaultState {
   writable: boolean
   dirName: string | null
   busy: boolean
-  connect: () => Promise<void>
+  connect: () => Promise<boolean>
   disconnect: () => Promise<void>
   save: (item: CollectionItem) => Promise<CollectionItem>
   remove: (item: CollectionItem) => Promise<void>
@@ -135,8 +136,7 @@ export function useVault(): VaultState {
       setPreferences(loadedPreferences)
       return true
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      notifications.error('无法读取收藏库', message)
+      notifications.error('无法读取收藏库', userFacingError(e, 'read'))
       setMode('bundled')
       setItems(getBundledItems())
       setPreferences(loadPreferences())
@@ -169,18 +169,21 @@ export function useVault(): VaultState {
   const connect = useCallback(async () => {
     if (!supported) {
       notifications.info('当前浏览器不支持文件夹连接', '请使用最新版 Chrome 或 Edge。')
-      return
+      return false
     }
     try {
       const h = await pickVaultDirectory()
       if (h && (await loadFromHandle(h))) {
         notifications.success('本地收藏库已连接', h.name)
+        return true
       }
+      return false
     } catch (e) {
       // user cancelled picker → ignore AbortError
       if (e instanceof Error && e.name !== 'AbortError') {
-        notifications.error('连接失败', e.message)
+        notifications.error('连接失败', userFacingError(e, 'connect'))
       }
+      return false
     }
   }, [supported, loadFromHandle, notifications])
 
@@ -240,7 +243,7 @@ export function useVault(): VaultState {
           notifications.success('收藏已保存', saved.name)
           return saved
         } catch (e) {
-          const message = e instanceof Error ? e.message : String(e)
+          const message = userFacingError(e, 'save')
           notifications.error('保存失败', message)
           throw e instanceof Error ? e : new Error(message)
         } finally {
@@ -321,8 +324,7 @@ export function useVault(): VaultState {
         setPreferences(await readVaultPreferences(handle))
         notifications.success('收藏库恢复完成', '恢复前的原数据已自动下载备份。')
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
-        notifications.error('恢复失败', message)
+        notifications.error('恢复失败', userFacingError(e, 'restore'))
       } finally {
         setBusy(false)
       }

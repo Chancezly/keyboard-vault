@@ -1,0 +1,17 @@
+{
+  "name": "KeyVault — 客制化键盘收藏与搭配库",
+  "short_name": "KeyVault",
+  "description": "无需注册、本地优先的客制化键盘收藏与搭配库",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0c0c0e",
+  "theme_color": "#0c0c0e",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

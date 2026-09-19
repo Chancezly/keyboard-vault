@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, X, Upload, Trash2, Download, Plus, Save, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, X, Upload, Trash2, Download, Plus, Save, Loader2 } from 'lucide-react'
 import type { BuildComposition, CollectionItem, ItemCategory, ItemStatus, SpecFieldKey } from '../lib/types'
 import { createThumbnailDataUrl, IMAGE_ACCEPT, normalizeImageFile } from '../lib/imageNormalize'
 import {
@@ -70,6 +70,7 @@ interface ItemEditorProps {
   allTags: string[]
   studioSuggestions: string[]
   inventoryItems: CollectionItem[]
+  quickStart?: boolean
   onSave: (item: CollectionItem) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -140,7 +141,7 @@ function SuggestInput({ value, onChange, placeholder, completions = [], suffix }
 }
 
 
-export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, onSave, onDelete, onClose }: ItemEditorProps) {
+export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryItems, quickStart = false, onSave, onDelete, onClose }: ItemEditorProps) {
   const [draft, setDraft] = useState<CollectionItem>(() => {
     const base =
       item.category === 'switches' && !item.lube ? { ...item, lube: '厂润' } : { ...item }
@@ -155,6 +156,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
   const [saveError, setSaveError] = useState<string | null>(null)
   const [imageBusy, setImageBusy] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(!quickStart)
   const fileRef = useRef<HTMLInputElement>(null)
   const isBuild = draft.category === 'builds'
   const composition = getBuildComposition(draft)
@@ -284,7 +286,8 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
         setDraft((d) => ({ ...d, thumbnail }))
       }
     } catch (e) {
-      setImageError(e instanceof Error ? e.message : String(e))
+      const detail = e instanceof Error ? e.message : String(e)
+      setImageError(`${detail} 请换用 JPG、PNG、WebP 或 HEIC 图片，并确认文件没有损坏。`)
     } finally {
       setImageBusy(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -408,6 +411,12 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
 
         {/* Body */}
         <div className="overflow-y-auto px-6 py-5 space-y-5">
+          {quickStart && !isBuild && (
+            <div className="rounded-2xl bg-accent/[0.07] border border-accent/15 px-4 py-3">
+              <p className="text-[13px] font-medium text-accent">先添加第一件收藏</p>
+              <p className="mt-1 text-[11px] leading-5 text-text-tertiary">上传照片并填写名称、分类和状态即可保存，其他信息以后随时补充。</p>
+            </div>
+          )}
           {/* Image uploader */}
           <div>
             <Label>封面图片{isBuild ? '（可选；不上传则使用套件图）' : ''}</Label>
@@ -501,7 +510,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
           {/* Basic */}
           {isBuild ? (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label>搭配名称（选填）</Label>
                   <input
@@ -703,7 +712,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                     suffix={draft.category === 'switches' ? '轴' : undefined}
                   />
                 </div>
-                <div>
+                {showAdvanced && <div>
                   <Label>{draft.category === 'keyboards' ? '工作室' : '品牌'}</Label>
                   <SuggestInput
                     value={draft.brand}
@@ -715,7 +724,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                         : []
                     }
                   />
-                </div>
+                </div>}
                 <div>
                   <Label>分类</Label>
                   <Dropdown
@@ -733,11 +742,21 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
                   />
                 </div>
               </div>
+              {quickStart && !showAdvanced && (
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(true)}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-[12px] text-text-secondary hover:bg-white/[0.06]"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                  完善规格、价格、评分和体验
+                </button>
+              )}
             </>
           )}
 
           {/* Specification (non-build) */}
-          {!isBuild && CATEGORY_SPEC_FIELDS[draft.category].length > 0 && (
+          {!isBuild && showAdvanced && CATEGORY_SPEC_FIELDS[draft.category].length > 0 && (
             <div
               className={`grid gap-4 ${
                 CATEGORY_SPEC_FIELDS[draft.category].length >= 3 ? 'grid-cols-3' : 'grid-cols-2'
@@ -865,7 +884,7 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
             </div>
           )}
 
-          {!isBuild && (
+          {!isBuild && showAdvanced && (
             <>
           {/* Purchase date (keyboards) / price */}
           <div className="grid grid-cols-2 gap-4">
@@ -1016,12 +1035,12 @@ export function ItemEditor({ item, isNew, allTags, studioSuggestions, inventoryI
             >
               <Trash2 className="w-3.5 h-3.5" /> {isNew ? '放弃' : '删除'}
             </button>
-            <button
+            {(!quickStart || showAdvanced) && <button
               onClick={() => downloadMarkdown(draft)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-all"
             >
               <Download className="w-3.5 h-3.5" /> 导出 Markdown
-            </button>
+            </button>}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] text-text-secondary hover:bg-white/[0.06] transition-all">

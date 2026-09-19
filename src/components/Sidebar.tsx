@@ -16,6 +16,7 @@ import {
   Heart,
   Settings2,
   History,
+  ShieldCheck,
 } from 'lucide-react'
 import type { ItemCategory } from '../lib/types'
 import { CATEGORY_LABELS } from '../lib/types'
@@ -47,6 +48,7 @@ interface SidebarProps {
   onRunDiagnostics: () => void
   onOpenPreferences: () => void
   onOpenHistory: () => void
+  onOpenPrivacy: () => void
 }
 
 const NAV_ITEMS: { id: ItemCategory | 'all'; icon: typeof Keyboard; color: string }[] = [
@@ -77,6 +79,7 @@ export function Sidebar({
   onRunDiagnostics,
   onOpenPreferences,
   onOpenHistory,
+  onOpenPrivacy,
 }: SidebarProps) {
   const zipInputRef = useRef<HTMLInputElement>(null)
   return (
@@ -263,6 +266,14 @@ export function Sidebar({
             当前为只读演示，连接后解锁全部功能
           </p>
         )}
+        <button
+          type="button"
+          onClick={onOpenPrivacy}
+          className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[11px] text-text-tertiary hover:bg-white/[0.04] hover:text-text-secondary transition-all"
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>隐私与数据</span>
+        </button>
       </div>
     </aside>
   )

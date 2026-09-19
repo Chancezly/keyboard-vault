@@ -11,6 +11,8 @@ import { MobileMenuSheet } from './components/MobileMenuSheet'
 import { VaultDiagnosticsDialog } from './components/VaultDiagnosticsDialog'
 import { PreferencesDialog } from './components/PreferencesDialog'
 import { HistoryDialog } from './components/HistoryDialog'
+import { ConnectionGuideDialog } from './components/ConnectionGuideDialog'
+import { PrivacyDialog } from './components/PrivacyDialog'
 import { CollectionContent } from './features/collection/CollectionContent'
 import { useCollectionView } from './features/collection/useCollectionView'
 import { createBlankItem } from './lib/store'
@@ -51,10 +53,18 @@ export default function App() {
   const [diagnostics, setDiagnostics] = useState<VaultDiagnosticsReport | null>(null)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [historyVersions, setHistoryVersions] = useState<HistoryVersion[] | null>(null)
+  const [connectionGuideOpen, setConnectionGuideOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
 
   const handleOpenHistory = async () => setHistoryVersions(await vault.getHistory())
 
   const title = category === 'all' ? '全部收藏' : CATEGORY_LABELS[category]
+
+  const requestConnect = () => setConnectionGuideOpen(true)
+
+  const connectFromGuide = async () => {
+    if (await vault.connect()) setConnectionGuideOpen(false)
+  }
 
   const handleSave = async (item: CollectionItem) => {
     if (readOnly) return
@@ -171,7 +181,7 @@ export default function App() {
         vaultWritable={vaultWritable}
         vaultDirName={vault.dirName}
         vaultBusy={vault.busy}
-        onConnectVault={vault.connect}
+        onConnectVault={requestConnect}
         onRequestDisconnect={() => setDisconnectOpen(true)}
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
@@ -179,6 +189,7 @@ export default function App() {
         onRunDiagnostics={() => void handleRunDiagnostics()}
         onOpenPreferences={() => setPreferencesOpen(true)}
         onOpenHistory={() => void handleOpenHistory()}
+        onOpenPrivacy={() => setPrivacyOpen(true)}
       />
 
       <div className="flex flex-1 min-w-0 flex-col lg:flex-row overflow-hidden">
@@ -202,7 +213,8 @@ export default function App() {
           {readOnly && (
             <ReadOnlyBanner
               vaultSupported={vault.supported}
-              onConnect={vault.connect}
+              onConnect={requestConnect}
+              onOpenPrivacy={() => setPrivacyOpen(true)}
               busy={vault.busy}
             />
           )}
@@ -217,7 +229,7 @@ export default function App() {
               vaultSupported={vault.supported}
               vaultBusy={vault.busy}
               wishlistCount={stats.wishlist}
-              onConnect={vault.connect}
+              onConnect={requestConnect}
               onNew={handleNew}
               onShowWishlist={() => setStatus('wishlist')}
               onSelectItem={(item) => void handleSelectItem(item)}
@@ -259,7 +271,7 @@ export default function App() {
         vaultBusy={vault.busy}
         aiOpen={aiOpen}
         onOpenAI={() => setAiOpen(true)}
-        onConnectVault={vault.connect}
+        onConnectVault={requestConnect}
         onRequestDisconnect={() => setDisconnectOpen(true)}
         onExportZip={vault.exportZip}
         onImportZip={vault.importZip}
@@ -267,6 +279,7 @@ export default function App() {
         onRunDiagnostics={() => void handleRunDiagnostics()}
         onOpenPreferences={() => setPreferencesOpen(true)}
         onOpenHistory={() => void handleOpenHistory()}
+        onOpenPrivacy={() => setPrivacyOpen(true)}
       />
 
       {selectedItem && !editing && (
@@ -290,6 +303,7 @@ export default function App() {
           allTags={allTags}
           studioSuggestions={studioSuggestions}
           inventoryItems={items}
+          quickStart={editing.isNew && items.length === 0}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
@@ -322,6 +336,16 @@ export default function App() {
           setHistoryVersions(await vault.getHistory())
         }} />
       )}
+      {connectionGuideOpen && (
+        <ConnectionGuideDialog
+          supported={vault.supported}
+          busy={vault.busy}
+          onConnect={() => void connectFromGuide()}
+          onClose={() => setConnectionGuideOpen(false)}
+          onOpenPrivacy={() => setPrivacyOpen(true)}
+        />
+      )}
+      {privacyOpen && <PrivacyDialog onClose={() => setPrivacyOpen(false)} />}
     </div>
   )
 }
